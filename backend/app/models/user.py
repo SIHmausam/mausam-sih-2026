@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -46,4 +46,29 @@ class User(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    preference = relationship(
+        "UserPreference",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    personas = relationship(
+        "UserPersona",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    weather_interests = relationship(
+        "UserWeatherInterest",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    activity_preferences = relationship(
+        "UserActivityPreference",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
