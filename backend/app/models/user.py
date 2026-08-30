@@ -72,3 +72,9 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    saved_locations = relationship(
+        "SavedLocation",
+        back_populates="user",
+        cascade="all, delete-orphan",
+  )
