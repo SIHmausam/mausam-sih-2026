@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -7,6 +8,8 @@ from app.core.config import settings
 
 
 password_hash = PasswordHash.recommended()
+
+ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
@@ -32,11 +35,49 @@ def create_access_token(
 
     payload = {
         "sub": subject,
+        "type": "access",
         "exp": expires_at,
+        "iat": datetime.now(timezone.utc),
     }
 
     return jwt.encode(
         payload,
         settings.secret_key,
-        algorithm="HS256",
+        algorithm=ALGORITHM,
+    )
+
+
+def create_refresh_token(
+    subject: str,
+) -> tuple[str, str, datetime]:
+    jti = str(uuid.uuid4())
+
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        days=settings.refresh_token_expire_days
+    )
+
+    payload = {
+        "sub": subject,
+        "type": "refresh",
+        "jti": jti,
+        "exp": expires_at,
+        "iat": datetime.now(timezone.utc),
+    }
+
+    token = jwt.encode(
+        payload,
+        settings.secret_key,
+        algorithm=ALGORITHM,
+    )
+
+    return token, jti, expires_at
+
+
+def decode_token(
+    token: str,
+) -> dict:
+    return jwt.decode(
+        token,
+        settings.secret_key,
+        algorithms=[ALGORITHM],
     )
