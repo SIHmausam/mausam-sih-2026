@@ -18,9 +18,7 @@ class PreferenceRepository:
         user_id: uuid.UUID,
     ) -> UserPreference | None:
         result = await self.session.execute(
-            select(UserPreference).where(
-                UserPreference.user_id == user_id
-            )
+            select(UserPreference).where(UserPreference.user_id == user_id)
         )
         return result.scalar_one_or_none()
 
@@ -29,9 +27,7 @@ class PreferenceRepository:
         user_id: uuid.UUID,
     ) -> list[UserPersona]:
         result = await self.session.execute(
-            select(UserPersona).where(
-                UserPersona.user_id == user_id
-            )
+            select(UserPersona).where(UserPersona.user_id == user_id)
         )
         return list(result.scalars().all())
 
@@ -40,9 +36,7 @@ class PreferenceRepository:
         user_id: uuid.UUID,
     ) -> list[UserWeatherInterest]:
         result = await self.session.execute(
-            select(UserWeatherInterest).where(
-                UserWeatherInterest.user_id == user_id
-            )
+            select(UserWeatherInterest).where(UserWeatherInterest.user_id == user_id)
         )
         return list(result.scalars().all())
 
@@ -87,9 +81,7 @@ class PreferenceRepository:
         personas: list[UserPersona],
     ) -> None:
         await self.session.execute(
-            delete(UserPersona).where(
-                UserPersona.user_id == user_id
-            )
+            delete(UserPersona).where(UserPersona.user_id == user_id)
         )
         self.session.add_all(personas)
 
@@ -99,9 +91,7 @@ class PreferenceRepository:
         interests: list[UserWeatherInterest],
     ) -> None:
         await self.session.execute(
-            delete(UserWeatherInterest).where(
-                UserWeatherInterest.user_id == user_id
-            )
+            delete(UserWeatherInterest).where(UserWeatherInterest.user_id == user_id)
         )
         self.session.add_all(interests)
 

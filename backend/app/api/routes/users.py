@@ -1,8 +1,4 @@
-from fastapi import APIRouter, Depends
-
-from app.dependencies.auth import get_current_user
-from app.models.user import User
-from app.schemas.user import UserResponse
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -38,9 +34,17 @@ router = APIRouter(
     response_model=UserResponse,
 )
 async def get_me(
-    current_user: User = Depends(get_current_user),
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
 ):
     return current_user
+
 
 @router.post(
     "/onboarding",
@@ -49,8 +53,14 @@ async def get_me(
 )
 async def complete_onboarding(
     payload: OnboardingRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session),
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
 ):
     service = PreferenceService(session)
 
@@ -66,20 +76,25 @@ async def complete_onboarding(
             detail=str(exc),
         ) from exc
 
+
 @router.get(
     "/preferences",
     response_model=PreferencesResponse,
 )
 async def get_preferences(
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session),
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
 ):
     service = PreferenceService(session)
 
     try:
-        return await service.get_preferences(
-            current_user.id
-        )
+        return await service.get_preferences(current_user.id)
 
     except PreferencesNotFoundError as exc:
         raise HTTPException(
@@ -87,14 +102,21 @@ async def get_preferences(
             detail=str(exc),
         ) from exc
 
+
 @router.patch(
     "/preferences",
     response_model=PreferencesResponse,
 )
 async def update_preferences(
     payload: PreferencesPatchRequest,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session),
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
 ):
     service = PreferenceService(session)
 

@@ -1,11 +1,10 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from pwdlib import PasswordHash
 
 from app.core.config import settings
-
 
 password_hash = PasswordHash.recommended()
 
@@ -29,7 +28,7 @@ def verify_password(
 def create_access_token(
     subject: str,
 ) -> str:
-    expires_at = datetime.now(timezone.utc) + timedelta(
+    expires_at = datetime.now(UTC) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
 
@@ -37,7 +36,7 @@ def create_access_token(
         "sub": subject,
         "type": "access",
         "exp": expires_at,
-        "iat": datetime.now(timezone.utc),
+        "iat": datetime.now(UTC),
     }
 
     return jwt.encode(
@@ -52,7 +51,7 @@ def create_refresh_token(
 ) -> tuple[str, str, datetime]:
     jti = str(uuid.uuid4())
 
-    expires_at = datetime.now(timezone.utc) + timedelta(
+    expires_at = datetime.now(UTC) + timedelta(
         days=settings.refresh_token_expire_days
     )
 
@@ -61,7 +60,7 @@ def create_refresh_token(
         "type": "refresh",
         "jti": jti,
         "exp": expires_at,
-        "iat": datetime.now(timezone.utc),
+        "iat": datetime.now(UTC),
     }
 
     token = jwt.encode(

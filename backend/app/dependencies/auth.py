@@ -1,4 +1,5 @@
 import uuid
+from typing import Annotated
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -10,13 +11,18 @@ from app.core.security import decode_token
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
-
 bearer_scheme = HTTPBearer()
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    session: AsyncSession = Depends(get_db_session),
+    credentials: Annotated[
+        HTTPAuthorizationCredentials,
+        Depends(bearer_scheme),
+    ],
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
 ) -> User:
     token = credentials.credentials
 

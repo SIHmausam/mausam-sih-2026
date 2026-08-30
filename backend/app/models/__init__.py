@@ -6,8 +6,8 @@ from app.models.user_weather_interest import UserWeatherInterest
 
 __all__ = [
     "User",
-    "UserPreference",
-    "UserPersona",
-    "UserWeatherInterest",
     "UserActivityPreference",
+    "UserPersona",
+    "UserPreference",
+    "UserWeatherInterest",
 ]

@@ -1,19 +1,12 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
 from app.core.config import settings
 from app.models.base import Base
-from app.models.user import User
-from app.models.user import User
-from app.models.user_activity_preference import UserActivityPreference
-from app.models.user_persona import UserPersona
-from app.models.user_preference import UserPreference
-from app.models.user_weather_interest import UserWeatherInterest
-
 
 config = context.config
 
@@ -57,18 +50,13 @@ def do_run_migrations(connection) -> None:
 
 async def run_async_migrations() -> None:
     connectable = async_engine_from_config(
-        config.get_section(
-            config.config_ini_section,
-            {}
-        ),
+        config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
     async with connectable.connect() as connection:
-        await connection.run_sync(
-            do_run_migrations
-        )
+        await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()
 

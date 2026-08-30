@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from redis.asyncio import Redis
 
 
 class TokenService:
-
     def __init__(self, redis: Redis):
         self.redis = redis
 
@@ -14,11 +13,7 @@ class TokenService:
         user_id: str,
         expires_at: datetime,
     ) -> None:
-        ttl = int(
-            (
-                expires_at - datetime.now(timezone.utc)
-            ).total_seconds()
-        )
+        ttl = int((expires_at - datetime.now(UTC)).total_seconds())
 
         if ttl <= 0:
             return
@@ -33,14 +28,10 @@ class TokenService:
         self,
         jti: str,
     ) -> str | None:
-        return await self.redis.get(
-            f"refresh:{jti}"
-        )
+        return await self.redis.get(f"refresh:{jti}")
 
     async def revoke_refresh_token(
         self,
         jti: str,
     ) -> None:
-        await self.redis.delete(
-            f"refresh:{jti}"
-        )
+        await self.redis.delete(f"refresh:{jti}")

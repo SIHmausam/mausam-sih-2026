@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -20,7 +22,6 @@ from app.schemas.auth import (
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
 
-
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
@@ -34,10 +35,14 @@ router = APIRouter(
 )
 async def register(
     payload: RegisterRequest,
-    session: AsyncSession = Depends(
-        get_db_session
-    ),
-    redis: Redis = Depends(get_redis),
+    session: Annotated[
+        AsyncSession,   
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,  
+        Depends(get_redis),
+   ],
 ):
     service = AuthService(
         session=session,
@@ -64,10 +69,14 @@ async def register(
 )
 async def login(
     payload: LoginRequest,
-    session: AsyncSession = Depends(
-        get_db_session
-    ),
-    redis: Redis = Depends(get_redis),
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
 ):
     service = AuthService(
         session=session,
@@ -101,10 +110,14 @@ async def login(
 )
 async def refresh(
     payload: RefreshRequest,
-    session: AsyncSession = Depends(
-        get_db_session
-    ),
-    redis: Redis = Depends(get_redis),
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
 ):
     service = AuthService(
         session=session,
@@ -115,9 +128,7 @@ async def refresh(
         (
             access_token,
             refresh_token,
-        ) = await service.refresh(
-            payload.refresh_token
-        )
+        ) = await service.refresh(payload.refresh_token)
 
         return TokenResponse(
             access_token=access_token,
@@ -137,20 +148,20 @@ async def refresh(
 )
 async def logout(
     payload: LogoutRequest,
-    session: AsyncSession = Depends(
-        get_db_session
-    ),
-    redis: Redis = Depends(get_redis),
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
 ):
     service = AuthService(
         session=session,
         redis=redis,
     )
 
-    await service.logout(
-        payload.refresh_token
-    )
+    await service.logout(payload.refresh_token)
 
-    return Response(
-        status_code=status.HTTP_204_NO_CONTENT
-    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

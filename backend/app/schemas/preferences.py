@@ -25,9 +25,7 @@ class PersonalizationSettings(BaseModel):
 class OnboardingRequest(BaseModel):
     preferred_language: str = "en"
 
-    temperature_unit: TemperatureUnit = (
-        TemperatureUnit.CELSIUS
-    )
+    temperature_unit: TemperatureUnit = TemperatureUnit.CELSIUS
 
     personas: list[UserPersonaType]
 
@@ -47,13 +45,9 @@ class OnboardingRequest(BaseModel):
 
     activity_contexts: list[ActivityContext]
 
-    notifications: NotificationSettings = (
-        NotificationSettings()
-    )
+    notifications: NotificationSettings = NotificationSettings()
 
-    personalization: PersonalizationSettings = (
-        PersonalizationSettings()
-    )
+    personalization: PersonalizationSettings = PersonalizationSettings()
 
     @field_validator(
         "personas",
@@ -63,11 +57,10 @@ class OnboardingRequest(BaseModel):
     @classmethod
     def reject_duplicates(cls, value):
         if len(value) != len(set(value)):
-            raise ValueError(
-                "Duplicate values are not allowed"
-            )
+            raise ValueError("Duplicate values are not allowed")
 
         return value
+
 
 class PreferencesResponse(BaseModel):
     preferred_language: str
@@ -84,6 +77,7 @@ class PreferencesResponse(BaseModel):
     personalization: PersonalizationSettings
 
     onboarding_completed: bool
+
 
 class NotificationSettingsPatch(BaseModel):
     official_alerts: bool | None = None
@@ -122,3 +116,21 @@ class PreferencesPatchRequest(BaseModel):
 
     notifications: NotificationSettingsPatch | None = None
     personalization: PersonalizationSettingsPatch | None = None
+
+    @field_validator(
+        "personas",
+        "interests",
+        "activity_contexts",
+    )
+    @classmethod
+    def reject_duplicate_patch_values(
+        cls,
+        value,
+    ):
+        if value is None:
+            return value
+
+        if len(value) != len(set(value)):
+            raise ValueError("Duplicate values are not allowed")
+
+        return value
