@@ -10,7 +10,6 @@ from app.schemas.weather import (
     DailyWeatherResponse,
     HourlyWeatherItem,
     HourlyWeatherResponse,
-    WeatherContextResponse,
 )
 
 
@@ -19,7 +18,6 @@ class WeatherService:
     HOURLY_TTL = 1800
     DAILY_TTL = 3600
     AGRICULTURE_TTL = 1800
-    CONTEXT_TTL = 600
 
     def __init__(
         self,
@@ -348,37 +346,3 @@ class WeatherService:
         )
 
         return response
-
-    async def get_weather_context(
-        self,
-        latitude: float,
-        longitude: float,
-    ) -> WeatherContextResponse:
-        current = await self.get_current(
-            latitude,
-            longitude,
-        )
-
-        hourly = await self.get_hourly(
-            latitude,
-            longitude,
-        )
-
-        daily = await self.get_daily(
-            latitude,
-            longitude,
-        )
-
-        agriculture = await self.get_agriculture_context(
-            latitude,
-            longitude,
-        )
-
-        return WeatherContextResponse(
-            latitude=latitude,
-            longitude=longitude,
-            current=current,
-            hourly=hourly.hourly,
-            daily=daily.daily,
-            agriculture=agriculture,
-        )

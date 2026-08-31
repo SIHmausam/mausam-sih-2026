@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.schemas.air_quality import CurrentAirQualityResponse
+
 
 class CurrentWeatherResponse(BaseModel):
     latitude: float
@@ -91,3 +93,5 @@ class WeatherContextResponse(BaseModel):
     daily: list[DailyWeatherItem]
 
     agriculture: AgricultureContextResponse | None = None
+
+    air_quality: CurrentAirQualityResponse | None = None
