@@ -19,5 +19,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    open_meteo_weather_url: str = "https://api.open-meteo.com/v1/forecast"
+
 
 settings = Settings()
