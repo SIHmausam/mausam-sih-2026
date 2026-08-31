@@ -30,6 +30,7 @@ class LocationService:
         location = SavedLocation(
             user_id=user_id,
             label=payload.label,
+            city=payload.city.strip(),
             latitude=payload.latitude,
             longitude=payload.longitude,
             location_type=payload.location_type.value,
@@ -76,6 +77,9 @@ class LocationService:
         try:
             if "label" in fields_set and payload.label is not None:
                 location.label = payload.label
+
+            if "city" in fields_set and payload.city is not None:
+                location.city = payload.city.strip()
 
             if "latitude" in fields_set and payload.latitude is not None:
                 location.latitude = payload.latitude

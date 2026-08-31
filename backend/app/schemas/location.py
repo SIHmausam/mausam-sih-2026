@@ -12,6 +12,11 @@ class LocationCreateRequest(BaseModel):
         max_length=100,
     )
 
+    city: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
     latitude: float = Field(
         ge=-90,
         le=90,
@@ -29,6 +34,12 @@ class LocationCreateRequest(BaseModel):
 
 class LocationUpdateRequest(BaseModel):
     label: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+    )
+
+    city: str | None = Field(
         default=None,
         min_length=1,
         max_length=100,
@@ -54,6 +65,7 @@ class LocationUpdateRequest(BaseModel):
 class LocationResponse(BaseModel):
     id: uuid.UUID
     label: str
+    city: str
     latitude: float
     longitude: float
     location_type: LocationType
