@@ -31,6 +31,7 @@ class ActivityContext(StrEnum):
     OUTDOOR_HEALTH = "outdoor_health"
     GENERAL = "general"
 
+
 class LocationType(StrEnum):
     HOME = "home"
     FARM = "farm"

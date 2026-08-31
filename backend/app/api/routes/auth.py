@@ -36,13 +36,13 @@ router = APIRouter(
 async def register(
     payload: RegisterRequest,
     session: Annotated[
-        AsyncSession,   
+        AsyncSession,
         Depends(get_db_session),
     ],
     redis: Annotated[
-        Redis,  
+        Redis,
         Depends(get_redis),
-   ],
+    ],
 ):
     service = AuthService(
         session=session,

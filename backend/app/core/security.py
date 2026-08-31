@@ -51,9 +51,7 @@ def create_refresh_token(
 ) -> tuple[str, str, datetime]:
     jti = str(uuid.uuid4())
 
-    expires_at = datetime.now(UTC) + timedelta(
-        days=settings.refresh_token_expire_days
-    )
+    expires_at = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
 
     payload = {
         "sub": subject,

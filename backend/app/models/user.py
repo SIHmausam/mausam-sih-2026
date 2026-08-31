@@ -77,4 +77,4 @@ class User(Base):
         "SavedLocation",
         back_populates="user",
         cascade="all, delete-orphan",
-  )
+    )
