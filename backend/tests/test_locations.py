@@ -9,10 +9,12 @@ from app.models.user import User
 def location_payload(
     label: str = "Home",
     *,
+    city: str = "Dehradun",
     is_primary: bool = True,
 ) -> dict:
     return {
         "label": label,
+        "city": city,
         "latitude": 30.3165,
         "longitude": 78.0322,
         "location_type": "home",
@@ -34,10 +36,27 @@ async def test_user_can_create_location(
     data = response.json()
 
     assert data["label"] == "Home"
+    assert data["city"] == "Dehradun"
     assert data["latitude"] == 30.3165
     assert data["longitude"] == 78.0322
     assert data["location_type"] == "home"
     assert data["is_primary"] is True
+
+
+@pytest.mark.asyncio
+async def test_city_is_required(
+    client: AsyncClient,
+):
+    payload = location_payload()
+
+    payload.pop("city")
+
+    response = await client.post(
+        "/api/v1/locations",
+        json=payload,
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -53,6 +72,7 @@ async def test_user_can_list_locations(
 
     assert response.status_code == 200
     assert len(response.json()) == 1
+    assert response.json()[0]["city"] == "Dehradun"
 
 
 @pytest.mark.asyncio
@@ -101,7 +121,8 @@ async def test_user_can_update_location(
     response = await client.patch(
         f"/api/v1/locations/{location_id}",
         json={
-            "label": "My Home",
+            "label": "Delhi Home",
+            "city": "Delhi",
             "location_type": "work",
         },
     )
@@ -110,7 +131,8 @@ async def test_user_can_update_location(
 
     data = response.json()
 
-    assert data["label"] == "My Home"
+    assert data["label"] == "Delhi Home"
+    assert data["city"] == "Delhi"
     assert data["location_type"] == "work"
 
 
@@ -122,6 +144,7 @@ async def test_only_one_location_is_primary(
         "/api/v1/locations",
         json=location_payload(
             label="Home",
+            city="Dehradun",
             is_primary=True,
         ),
     )
@@ -130,6 +153,7 @@ async def test_only_one_location_is_primary(
 
     second_payload = {
         "label": "Farm",
+        "city": "Haridwar",
         "latitude": 30.4,
         "longitude": 78.1,
         "location_type": "farm",
@@ -192,7 +216,10 @@ async def test_user_cannot_update_another_users_location(
 
     response = await client.patch(
         f"/api/v1/locations/{location_id}",
-        json={"label": "Hacked Location"},
+        json={
+            "label": "Hacked Location",
+            "city": "Mumbai",
+        },
     )
 
     assert response.status_code == 404

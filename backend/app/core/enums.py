@@ -38,3 +38,21 @@ class LocationType(StrEnum):
     DESTINATION = "destination"
     WORK = "work"
     OTHER = "other"
+
+
+class CardType(StrEnum):
+    AQI = "aqi"
+    UV = "uv"
+    TEMPERATURE = "temperature"
+    HUMIDITY = "humidity"
+    RAINFALL = "rainfall"
+    WIND = "wind"
+    SOIL_MOISTURE = "soil_moisture"
+    WEATHER_CONDITION = "weather_condition"
+
+
+class InteractionAction(StrEnum):
+    VIEW = "view"
+    CLICK = "click"
+    EXPAND = "expand"
+    DISMISS = "dismiss"
