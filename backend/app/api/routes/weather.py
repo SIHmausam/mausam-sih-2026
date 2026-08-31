@@ -8,6 +8,13 @@ from fastapi import (
 from redis.asyncio import Redis
 
 from app.core.redis import get_redis
+from app.dependencies.providers import (
+    get_air_quality_provider,
+    get_weather_provider,
+)
+from app.integrations.air_quality.open_meteo import (
+    OpenMeteoAirQualityProvider,
+)
 from app.integrations.weather.open_meteo import (
     OpenMeteoWeatherProvider,
 )
@@ -18,16 +25,18 @@ from app.schemas.weather import (
     HourlyWeatherResponse,
     WeatherContextResponse,
 )
+from app.services.air_quality_service import (
+    AirQualityService,
+)
+from app.services.weather_context_service import (
+    WeatherContextService,
+)
 from app.services.weather_service import WeatherService
 
 router = APIRouter(
     prefix="/weather",
     tags=["Weather"],
 )
-
-
-def get_weather_provider() -> OpenMeteoWeatherProvider:
-    return OpenMeteoWeatherProvider()
 
 
 @router.get(
@@ -179,17 +188,31 @@ async def get_weather_context(
         Redis,
         Depends(get_redis),
     ],
-    provider: Annotated[
+    weather_provider: Annotated[
         OpenMeteoWeatherProvider,
         Depends(get_weather_provider),
     ],
+    air_quality_provider: Annotated[
+        OpenMeteoAirQualityProvider,
+        Depends(get_air_quality_provider),
+    ],
 ):
-    service = WeatherService(
-        provider=provider,
+    weather_service = WeatherService(
+        provider=weather_provider,
         redis=redis,
     )
 
-    return await service.get_weather_context(
+    air_quality_service = AirQualityService(
+        provider=air_quality_provider,
+        redis=redis,
+    )
+
+    context_service = WeatherContextService(
+        weather_service=weather_service,
+        air_quality_service=air_quality_service,
+    )
+
+    return await context_service.get_context(
         latitude,
         longitude,
     )

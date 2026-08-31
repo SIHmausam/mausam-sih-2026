@@ -1,8 +1,10 @@
 import pytest
 from httpx import AsyncClient
 
-from app.api.routes.weather import get_weather_provider
 from app.core.redis import get_redis
+from app.dependencies.providers import (
+    get_weather_provider,
+)
 from app.main import app
 from app.schemas.weather import CurrentWeatherResponse
 from app.services.weather_service import WeatherService
@@ -319,41 +321,6 @@ async def test_agriculture_context_is_normalized():
     assert response.evapotranspiration == 0.18
     assert response.vapour_pressure_deficit == 0.9
 
-    assert provider.agriculture_calls == 1
-
-
-@pytest.mark.asyncio
-async def test_weather_context_combines_all_sections():
-    provider = FakeWeatherProvider()
-    redis = FakeRedis()
-
-    service = WeatherService(
-        provider=provider,
-        redis=redis,
-    )
-
-    response = await service.get_weather_context(
-        latitude=28.6139,
-        longitude=77.2090,
-    )
-
-    assert response.latitude == 28.6139
-    assert response.longitude == 77.2090
-
-    assert response.current.temperature == 30.5
-
-    assert len(response.hourly) == 2
-    assert response.hourly[0].temperature == 29.5
-
-    assert len(response.daily) == 2
-    assert response.daily[0].temperature_max == 34.0
-
-    assert response.agriculture is not None
-    assert response.agriculture.surface_soil_moisture == 0.32
-
-    assert provider.current_calls == 1
-    assert provider.hourly_calls == 1
-    assert provider.daily_calls == 1
     assert provider.agriculture_calls == 1
 
 
