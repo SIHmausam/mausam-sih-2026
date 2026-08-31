@@ -20,10 +20,8 @@ class PreferencesNotFoundError(Exception):
     """Raised when a user has no stored preferences."""
 
 
-
 class OnboardingAlreadyCompletedError(Exception):
     """Raised when a user attempts to complete onboarding more than once."""
-
 
 
 class PreferenceService:

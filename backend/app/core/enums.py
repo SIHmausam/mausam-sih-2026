@@ -30,3 +30,11 @@ class ActivityContext(StrEnum):
     COMMUTE = "commute"
     OUTDOOR_HEALTH = "outdoor_health"
     GENERAL = "general"
+
+
+class LocationType(StrEnum):
+    HOME = "home"
+    FARM = "farm"
+    DESTINATION = "destination"
+    WORK = "work"
+    OTHER = "other"
