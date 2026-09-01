@@ -56,3 +56,13 @@ class InteractionAction(StrEnum):
     CLICK = "click"
     EXPAND = "expand"
     DISMISS = "dismiss"
+
+
+class Weekday(StrEnum):
+    MONDAY = "monday"
+    TUESDAY = "tuesday"
+    WEDNESDAY = "wednesday"
+    THURSDAY = "thursday"
+    FRIDAY = "friday"
+    SATURDAY = "saturday"
+    SUNDAY = "sunday"

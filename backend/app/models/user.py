@@ -78,3 +78,9 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    routines = relationship(
+        "UserRoutine",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

@@ -8,6 +8,9 @@ from app.api.routes.alerts import (
 )
 from app.api.routes.auth import router as auth_router
 from app.api.routes.locations import router as locations_router
+from app.api.routes.routines import (
+    router as routines_router,
+)
 from app.api.routes.users import router as users_router
 from app.api.routes.weather import router as weather_router
 
@@ -19,3 +22,4 @@ api_router.include_router(locations_router)
 api_router.include_router(weather_router)
 api_router.include_router(air_quality_router)
 api_router.include_router(alerts_router)
+api_router.include_router(routines_router)
