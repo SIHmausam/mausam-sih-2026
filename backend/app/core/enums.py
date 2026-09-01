@@ -56,3 +56,23 @@ class InteractionAction(StrEnum):
     CLICK = "click"
     EXPAND = "expand"
     DISMISS = "dismiss"
+
+
+class Weekday(StrEnum):
+    MONDAY = "monday"
+    TUESDAY = "tuesday"
+    WEDNESDAY = "wednesday"
+    THURSDAY = "thursday"
+    FRIDAY = "friday"
+    SATURDAY = "saturday"
+    SUNDAY = "sunday"
+
+
+class RoutineImpactLevel(StrEnum):
+    SAFE = "safe"
+    CAUTION = "caution"
+    AVOID = "avoid"
+
+    # Used only when there is not enough
+    # environmental/location data to evaluate.
+    UNAVAILABLE = "unavailable"

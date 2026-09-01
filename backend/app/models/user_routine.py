@@ -1,12 +1,14 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
-    Float,
     ForeignKey,
+    Integer,
     String,
+    Time,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,8 +16,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 
-class SavedLocation(Base):
-    __tablename__ = "saved_locations"
+class UserRoutine(Base):
+    __tablename__ = "user_routines"
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -31,34 +33,43 @@ class SavedLocation(Base):
         index=True,
     )
 
-    label: Mapped[str] = mapped_column(
+    saved_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "saved_locations.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
     )
 
-    city: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    )
-
-    latitude: Mapped[float] = mapped_column(
-        Float,
-        nullable=False,
-    )
-
-    longitude: Mapped[float] = mapped_column(
-        Float,
-        nullable=False,
-    )
-
-    location_type: Mapped[str] = mapped_column(
+    activity_context: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
     )
 
-    is_primary: Mapped[bool] = mapped_column(
+    days_of_week: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+    )
+
+    start_time: Mapped[time] = mapped_column(
+        Time,
+        nullable=False,
+    )
+
+    duration_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    is_enabled: Mapped[bool] = mapped_column(
         Boolean,
-        default=False,
+        default=True,
         nullable=False,
     )
 
@@ -77,10 +88,10 @@ class SavedLocation(Base):
 
     user = relationship(
         "User",
-        back_populates="saved_locations",
+        back_populates="routines",
     )
 
-    routines = relationship(
-        "UserRoutine",
-        back_populates="saved_location",
+    saved_location = relationship(
+        "SavedLocation",
+        back_populates="routines",
     )
