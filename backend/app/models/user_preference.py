@@ -1,7 +1,16 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Integer,
+    String,
+)
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from app.models.base import Base
 
@@ -10,7 +19,10 @@ class UserPreference(Base):
     __tablename__ = "user_preferences"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+        ),
         primary_key=True,
     )
 
@@ -24,6 +36,15 @@ class UserPreference(Base):
         String(20),
         default="celsius",
         nullable=False,
+    )
+
+    # Single personalization persona.
+    #
+    # Nullable because a user may exist before
+    # completing onboarding.
+    persona: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
     )
 
     preferred_start_hour: Mapped[int | None] = mapped_column(

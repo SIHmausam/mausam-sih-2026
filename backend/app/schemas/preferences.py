@@ -1,4 +1,8 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    field_validator,
+)
 
 from app.core.enums import (
     ActivityContext,
@@ -27,7 +31,8 @@ class OnboardingRequest(BaseModel):
 
     temperature_unit: TemperatureUnit = TemperatureUnit.CELSIUS
 
-    personas: list[UserPersonaType]
+    # A user now chooses exactly one persona.
+    persona: UserPersonaType
 
     interests: list[WeatherInterest]
 
@@ -50,12 +55,14 @@ class OnboardingRequest(BaseModel):
     personalization: PersonalizationSettings = PersonalizationSettings()
 
     @field_validator(
-        "personas",
         "interests",
         "activity_contexts",
     )
     @classmethod
-    def reject_duplicates(cls, value):
+    def reject_duplicates(
+        cls,
+        value,
+    ):
         if len(value) != len(set(value)):
             raise ValueError("Duplicate values are not allowed")
 
@@ -64,16 +71,22 @@ class OnboardingRequest(BaseModel):
 
 class PreferencesResponse(BaseModel):
     preferred_language: str
+
     temperature_unit: TemperatureUnit
+
+    # None is possible only for a pre-onboarding
+    # or legacy migrated user.
+    persona: UserPersonaType | None
 
     preferred_start_hour: int | None
     preferred_end_hour: int | None
 
-    personas: list[UserPersonaType]
     interests: list[WeatherInterest]
+
     activity_contexts: list[ActivityContext]
 
     notifications: NotificationSettings
+
     personalization: PersonalizationSettings
 
     onboarding_completed: bool
@@ -98,6 +111,8 @@ class PreferencesPatchRequest(BaseModel):
 
     temperature_unit: TemperatureUnit | None = None
 
+    persona: UserPersonaType | None = None
+
     preferred_start_hour: int | None = Field(
         default=None,
         ge=0,
@@ -110,15 +125,15 @@ class PreferencesPatchRequest(BaseModel):
         le=23,
     )
 
-    personas: list[UserPersonaType] | None = None
     interests: list[WeatherInterest] | None = None
+
     activity_contexts: list[ActivityContext] | None = None
 
     notifications: NotificationSettingsPatch | None = None
+
     personalization: PersonalizationSettingsPatch | None = None
 
     @field_validator(
-        "personas",
         "interests",
         "activity_contexts",
     )
