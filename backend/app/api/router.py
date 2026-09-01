@@ -3,6 +3,9 @@ from fastapi import APIRouter
 from app.api.routes.air_quality import (
     router as air_quality_router,
 )
+from app.api.routes.alerts import (
+    router as alerts_router,
+)
 from app.api.routes.auth import router as auth_router
 from app.api.routes.locations import router as locations_router
 from app.api.routes.users import router as users_router
@@ -15,3 +18,4 @@ api_router.include_router(users_router)
 api_router.include_router(locations_router)
 api_router.include_router(weather_router)
 api_router.include_router(air_quality_router)
+api_router.include_router(alerts_router)

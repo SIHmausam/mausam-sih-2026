@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     open_meteo_air_quality_url: str = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
     )
+    sachet_rss_url: str
+    sachet_cap_url: str
 
 
 settings = Settings()

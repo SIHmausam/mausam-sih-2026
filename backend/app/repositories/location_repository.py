@@ -76,3 +76,16 @@ class LocationRepository:
         location: SavedLocation,
     ) -> None:
         await self.session.delete(location)
+
+    async def get_primary_for_user(
+        self,
+        user_id: uuid.UUID,
+    ) -> SavedLocation | None:
+        result = await self.session.execute(
+            select(SavedLocation).where(
+                SavedLocation.user_id == user_id,
+                SavedLocation.is_primary.is_(True),
+            )
+        )
+
+        return result.scalar_one_or_none()
