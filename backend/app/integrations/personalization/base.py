@@ -4,6 +4,7 @@ from abc import (
 )
 
 from app.schemas.personalization import (
+    MLInteractionRequest,
     MLPersonalizationRequest,
     MLPersonalizationResponse,
 )
@@ -27,4 +28,11 @@ class PersonalizationProvider(ABC):
         self,
         request: MLPersonalizationRequest,
     ) -> MLPersonalizationResponse:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def record_interaction(
+        self,
+        request: MLInteractionRequest,
+    ) -> None:
         raise NotImplementedError

@@ -7,6 +7,7 @@ from app.integrations.personalization.base import (
     PersonalizationProviderUnavailableError,
 )
 from app.schemas.personalization import (
+    MLInteractionRequest,
     MLPersonalizationRequest,
     MLPersonalizationResponse,
 )
@@ -82,3 +83,42 @@ class MLAPIPersonalizationProvider(PersonalizationProvider):
                     "ML personalization service returned an invalid response"
                 )
             ) from exc
+
+    async def record_interaction(
+        self,
+        request: MLInteractionRequest,
+    ) -> None:
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self.timeout_seconds,
+                transport=self.transport,
+            ) as client:
+                response = await client.post(
+                    "/interaction",
+                    json=request.model_dump(mode="json"),
+                )
+
+        except (
+            httpx.TimeoutException,
+            httpx.RequestError,
+        ) as exc:
+            raise (
+                PersonalizationProviderUnavailableError(
+                    "ML personalization service is unavailable"
+                )
+            ) from exc
+
+        if response.status_code >= 500:
+            raise (
+                PersonalizationProviderUnavailableError(
+                    f"ML interaction service returned {response.status_code}"
+                )
+            )
+
+        if response.status_code >= 400:
+            raise (
+                PersonalizationProviderResponseError(
+                    f"ML interaction request was rejected with {response.status_code}"
+                )
+            )

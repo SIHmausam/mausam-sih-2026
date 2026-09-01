@@ -29,6 +29,33 @@ MLCardType = Literal[
     "weather_condition",
 ]
 
+MLInteractionAction = Literal[
+    "view",
+    "click",
+    "expand",
+    "dismiss",
+]
+
+
+class MLInteractionRequest(BaseModel):
+    user_id: str
+
+    card_id: MLCardType
+
+    action: MLInteractionAction
+
+    timestamp: datetime
+
+    position: int = Field(
+        ge=1,
+        le=8,
+    )
+
+    session_id: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+
 
 class MLWeatherFeatures(BaseModel):
     city: str
