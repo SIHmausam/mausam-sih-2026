@@ -28,7 +28,13 @@ ML_CARD_MAP: dict[
 }
 
 
-ML_ENVIRONMENT_FEATURES: tuple[str, ...] = (
+ML_CARD_REVERSE_MAP: dict[
+    str,
+    CardType,
+] = {ml_card: backend_card for backend_card, ml_card in ML_CARD_MAP.items()}
+
+
+ML_REQUIRED_MODEL_FEATURES: tuple[str, ...] = (
     "temperature_2m",
     "relative_humidity_2m",
     "apparent_temperature",
@@ -46,11 +52,4 @@ ML_ENVIRONMENT_FEATURES: tuple[str, ...] = (
     "sulphur_dioxide",
     "carbon_monoxide",
     "ozone",
-)
-
-
-ML_CATEGORICAL_FEATURES: tuple[str, ...] = (
-    "city",
-    "persona",
-    "card",
 )
