@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import AsyncClient
 
@@ -20,6 +22,14 @@ from app.services.alert_service import (
     AlertCacheError,
     AlertService,
 )
+
+now = datetime.now(UTC)
+
+effective = (now - timedelta(hours=1)).isoformat()
+
+onset = (now - timedelta(minutes=30)).isoformat()
+
+expires = (now + timedelta(hours=2)).isoformat()
 
 RSS_XML = """
 <rss version="2.0">
@@ -53,7 +63,7 @@ RSS_XML = """
 """
 
 
-CAP_XML = """
+CAP_XML = f"""
 <alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
     <identifier>ALERT-001</identifier>
 
@@ -90,17 +100,9 @@ CAP_XML = """
             Likely
         </certainty>
 
-        <effective>
-            2026-09-01T01:20:52+00:00
-        </effective>
-
-        <onset>
-            2026-09-01T01:30:00+00:00
-        </onset>
-
-        <expires>
-            2026-09-01T04:30:00+00:00
-        </expires>
+        <effective>{effective}</effective>
+        <onset>{onset}</onset>
+        <expires>{expires}</expires>
 
         <senderName>
             India Meteorological Department
