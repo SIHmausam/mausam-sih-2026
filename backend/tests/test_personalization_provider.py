@@ -1,5 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import (
+    UTC,
+    datetime,
+)
 
 import httpx
 import pytest
@@ -12,6 +15,7 @@ from app.integrations.personalization.ml_api import (
     MLAPIPersonalizationProvider,
 )
 from app.schemas.personalization import (
+    MLInteractionRequest,
     MLPersonalizationRequest,
     MLWeatherFeatures,
 )
@@ -133,3 +137,39 @@ async def test_ml_provider_handles_server_error():
 
     with pytest.raises(PersonalizationProviderUnavailableError):
         await provider.personalize(build_request())
+
+
+@pytest.mark.asyncio
+async def test_ml_provider_forwards_interaction():
+    captured = {}
+
+    async def handler(
+        request: httpx.Request,
+    ):
+        captured["path"] = request.url.path
+
+        captured["body"] = request.content.decode()
+
+        return httpx.Response(
+            201,
+            json={"status": "saved"},
+        )
+
+    provider = MLAPIPersonalizationProvider(
+        base_url=("http://ml-service:8001"),
+        timeout_seconds=5.0,
+        transport=httpx.MockTransport(handler),
+    )
+
+    request = MLInteractionRequest(
+        user_id=str(uuid.uuid4()),
+        card_id="rain",
+        action="click",
+        timestamp=datetime.now(UTC),
+        position=2,
+        session_id="session-123",
+    )
+
+    await provider.record_interaction(request)
+
+    assert captured["path"] == "/interaction"
