@@ -21,17 +21,18 @@ class WeatherContextService:
         latitude: float,
         longitude: float,
     ) -> WeatherContextResponse:
+
+        current = await self.weather_service.get_current(
+            latitude,
+            longitude,
+        )
+
         (
-            current,
             hourly,
             daily,
             agriculture,
             air_quality,
         ) = await asyncio.gather(
-            self.weather_service.get_current(
-                latitude,
-                longitude,
-            ),
             self.weather_service.get_hourly(
                 latitude,
                 longitude,

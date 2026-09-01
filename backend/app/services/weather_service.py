@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from redis.asyncio import Redis
@@ -77,6 +78,7 @@ class WeatherService:
         response = CurrentWeatherResponse(
             latitude=latitude,
             longitude=longitude,
+            observed_at=current.get("time"),
             temperature=current.get("temperature_2m"),
             apparent_temperature=current.get("apparent_temperature"),
             humidity=current.get("relative_humidity_2m"),
@@ -98,6 +100,44 @@ class WeatherService:
         )
 
         return response
+
+    @staticmethod
+    def _nearest_time_index(
+        times: list[Any] | None,
+        reference_time: datetime | None,
+    ) -> int | None:
+        if not times:
+            return None
+
+        if reference_time is None:
+            return 0
+
+        # Provider timestamps may be timezone-aware or
+        # timezone-naive. We compare their wall-clock values
+        # consistently here.
+        reference = reference_time.replace(tzinfo=None)
+
+        closest_index: int | None = None
+        closest_difference: float | None = None
+
+        for index, value in enumerate(times):
+            try:
+                if isinstance(value, datetime):
+                    candidate = value
+                else:
+                    candidate = datetime.fromisoformat(str(value))
+            except ValueError:
+                continue
+
+            candidate = candidate.replace(tzinfo=None)
+
+            difference = abs((candidate - reference).total_seconds())
+
+            if closest_difference is None or difference < closest_difference:
+                closest_index = index
+                closest_difference = difference
+
+        return closest_index
 
     async def get_hourly(
         self,
@@ -293,6 +333,7 @@ class WeatherService:
         self,
         latitude: float,
         longitude: float,
+        reference_time: datetime | None = None,
     ) -> AgricultureContextResponse:
         coordinates = self._coordinate_key(
             latitude,
@@ -306,6 +347,13 @@ class WeatherService:
         if cached:
             return AgricultureContextResponse.model_validate_json(cached)
 
+        if reference_time is None:
+            current = await self.get_current(
+                latitude,
+                longitude,
+            )
+            reference_time = current.observed_at
+
         raw = await self.provider.get_agriculture_context(
             latitude,
             longitude,
@@ -314,6 +362,11 @@ class WeatherService:
         hourly = raw.get(
             "hourly",
             {},
+        )
+
+        times = hourly.get(
+            "time",
+            [],
         )
 
         soil = hourly.get(
@@ -331,12 +384,38 @@ class WeatherService:
             [],
         )
 
+        nearest_index = self._nearest_time_index(
+            times=times,
+            reference_time=reference_time,
+        )
+
         response = AgricultureContextResponse(
             latitude=latitude,
             longitude=longitude,
-            surface_soil_moisture=(soil[0] if soil else None),
-            evapotranspiration=(et0[0] if et0 else None),
-            vapour_pressure_deficit=(vpd[0] if vpd else None),
+            surface_soil_moisture=(
+                self._value_at(
+                    soil,
+                    nearest_index,
+                )
+                if nearest_index is not None
+                else None
+            ),
+            evapotranspiration=(
+                self._value_at(
+                    et0,
+                    nearest_index,
+                )
+                if nearest_index is not None
+                else None
+            ),
+            vapour_pressure_deficit=(
+                self._value_at(
+                    vpd,
+                    nearest_index,
+                )
+                if nearest_index is not None
+                else None
+            ),
         )
 
         await self.redis.set(

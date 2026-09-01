@@ -9,6 +9,8 @@ class CurrentWeatherResponse(BaseModel):
     latitude: float
     longitude: float
 
+    observed_at: datetime | None = None
+
     temperature: float | None = None
     apparent_temperature: float | None = None
     humidity: float | None = None
