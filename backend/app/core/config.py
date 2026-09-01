@@ -27,5 +27,9 @@ class Settings(BaseSettings):
     sachet_rss_url: str
     sachet_cap_url: str
 
+    ml_service_url: str = "http://127.0.0.1:8001"
+
+    ml_request_timeout_seconds: float = 5.0
+
 
 settings = Settings()
