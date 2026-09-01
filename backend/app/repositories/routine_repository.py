@@ -50,3 +50,18 @@ class RoutineRepository:
         routine: UserRoutine,
     ) -> None:
         await self.session.delete(routine)
+
+    async def list_enabled_for_user(
+        self,
+        user_id: uuid.UUID,
+    ) -> list[UserRoutine]:
+        result = await self.session.execute(
+            select(UserRoutine)
+            .where(
+                UserRoutine.user_id == user_id,
+                UserRoutine.is_enabled.is_(True),
+            )
+            .order_by(UserRoutine.start_time.asc())
+        )
+
+        return list(result.scalars().all())

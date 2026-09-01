@@ -66,3 +66,13 @@ class Weekday(StrEnum):
     FRIDAY = "friday"
     SATURDAY = "saturday"
     SUNDAY = "sunday"
+
+
+class RoutineImpactLevel(StrEnum):
+    SAFE = "safe"
+    CAUTION = "caution"
+    AVOID = "avoid"
+
+    # Used only when there is not enough
+    # environmental/location data to evaluate.
+    UNAVAILABLE = "unavailable"

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, time
+from datetime import date, datetime, time
 
 from pydantic import (
     BaseModel,
@@ -10,6 +10,7 @@ from pydantic import (
 
 from app.core.enums import (
     ActivityContext,
+    RoutineImpactLevel,
     Weekday,
 )
 
@@ -109,3 +110,56 @@ class RoutineResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RoutineLocationSummary(BaseModel):
+    id: uuid.UUID
+    label: str
+    city: str
+
+    latitude: float
+    longitude: float
+
+
+class RoutineWeatherSnapshot(BaseModel):
+    temperature: float | None = None
+    apparent_temperature: float | None = None
+
+    humidity: float | None = None
+
+    rain: float | None = None
+    rain_probability: float | None = None
+
+    wind_speed: float | None = None
+    visibility: float | None = None
+
+    aqi: float | None = None
+    uv_index: float | None = None
+
+    surface_soil_moisture: float | None = None
+
+
+class MyDayRoutineItem(BaseModel):
+    routine_id: uuid.UUID
+
+    name: str
+    activity_context: ActivityContext
+
+    start_time: time
+    duration_minutes: int
+
+    location: RoutineLocationSummary | None = None
+
+    impact: RoutineImpactLevel
+
+    reasons: list[str] = Field(default_factory=list)
+
+    recommendation: str
+
+    weather: RoutineWeatherSnapshot | None = None
+
+
+class MyDayResponse(BaseModel):
+    date: date
+
+    routines: list[MyDayRoutineItem]
