@@ -3,38 +3,32 @@ from app.core.enums import (
     UserPersonaType,
 )
 
-# Backend domain values are intentionally different
-# from model-training categorical values.
-#
-# Do not rename persisted backend personas/cards merely
-# to match the current ML model.
-
-COLD_START_PERSONA_MAP: dict[
+ML_PERSONA_MAP: dict[
     UserPersonaType,
     str,
 ] = {
-    UserPersonaType.FARMER: "Farmer",
-    UserPersonaType.TRAVELLER: "Traveler",
-    UserPersonaType.HEALTH: "Fitness",
+    UserPersonaType.FARMER: "farmer",
+    UserPersonaType.TRAVELLER: "traveler",
+    UserPersonaType.HEALTH: "fitness",
 }
 
 
-COLD_START_CARD_MAP: dict[
+ML_CARD_MAP: dict[
     CardType,
     str,
 ] = {
-    CardType.AQI: "AQI",
-    CardType.UV: "UV",
-    CardType.TEMPERATURE: "Temperature",
-    CardType.HUMIDITY: "Humidity",
-    CardType.RAINFALL: "Rain",
-    CardType.WIND: "Wind",
-    CardType.SOIL_MOISTURE: "Soil Moisture",
-    CardType.WEATHER_CONDITION: "Weather Condition",
+    CardType.AQI: "aqi",
+    CardType.UV: "uv",
+    CardType.TEMPERATURE: "temperature",
+    CardType.HUMIDITY: "humidity",
+    CardType.RAINFALL: "rain",
+    CardType.WIND: "wind",
+    CardType.SOIL_MOISTURE: "soil_moisture",
+    CardType.WEATHER_CONDITION: ("weather_condition"),
 }
 
 
-COLD_START_ENVIRONMENT_FEATURES: tuple[str, ...] = (
+ML_ENVIRONMENT_FEATURES: tuple[str, ...] = (
     "temperature_2m",
     "relative_humidity_2m",
     "apparent_temperature",
@@ -52,14 +46,10 @@ COLD_START_ENVIRONMENT_FEATURES: tuple[str, ...] = (
     "sulphur_dioxide",
     "carbon_monoxide",
     "ozone",
-    "is_daylight",
-    "hour",
-    "day_of_week",
-    "month",
 )
 
 
-COLD_START_CATEGORICAL_FEATURES: tuple[str, ...] = (
+ML_CATEGORICAL_FEATURES: tuple[str, ...] = (
     "city",
     "persona",
     "card",

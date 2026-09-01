@@ -3,7 +3,6 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_activity_preference import UserActivityPreference
-from app.models.user_persona import UserPersona
 from app.models.user_preference import UserPreference
 from app.models.user_weather_interest import UserWeatherInterest
 from app.repositories.preference_repository import PreferenceRepository
@@ -56,6 +55,8 @@ class PreferenceService:
 
         preference.temperature_unit = payload.temperature_unit.value
 
+        preference.persona = payload.persona.value
+
         preference.preferred_start_hour = payload.preferred_start_hour
 
         preference.preferred_end_hour = payload.preferred_end_hour
@@ -82,15 +83,6 @@ class PreferenceService:
 
         preference.onboarding_completed = True
 
-        # Build persona rows
-        personas = [
-            UserPersona(
-                user_id=user_id,
-                persona=persona.value,
-            )
-            for persona in payload.personas
-        ]
-
         # Build weather-interest rows
         interests = [
             UserWeatherInterest(
@@ -113,11 +105,6 @@ class PreferenceService:
         try:
             if existing is None:
                 self.repository.add_preference(preference)
-
-            await self.repository.replace_personas(
-                user_id,
-                personas,
-            )
 
             await self.repository.replace_interests(
                 user_id,
@@ -151,8 +138,6 @@ class PreferenceService:
         if preference is None:
             raise PreferencesNotFoundError("User preferences not found")
 
-        personas = await self.repository.get_personas(user_id)
-
         interests = await self.repository.get_interests(user_id)
 
         activities = await self.repository.get_activity_preferences(user_id)
@@ -162,7 +147,7 @@ class PreferenceService:
             temperature_unit=(preference.temperature_unit),
             preferred_start_hour=(preference.preferred_start_hour),
             preferred_end_hour=(preference.preferred_end_hour),
-            personas=[item.persona for item in personas],
+            persona=preference.persona,
             interests=[item.interest for item in interests if item.enabled],
             activity_contexts=[item.activity_context for item in activities],
             notifications=NotificationSettings(
@@ -303,19 +288,8 @@ class PreferenceService:
             # Personas
             # --------------------------------
 
-            if "personas" in fields_set and payload.personas is not None:
-                personas = [
-                    UserPersona(
-                        user_id=user_id,
-                        persona=persona.value,
-                    )
-                    for persona in payload.personas
-                ]
-
-                await self.repository.replace_personas(
-                    user_id,
-                    personas,
-                )
+            if "persona" in fields_set and payload.persona is not None:
+                preference.persona = payload.persona.value
 
             # --------------------------------
             # Weather interests
