@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import joblib
+from pathlib import Path
 
 from src.behavioral_preference import build_preference_profile
 from src.card_insights import get_card_insight
@@ -9,7 +10,8 @@ from src.card_insights import get_card_insight
 # Configuration
 # ============================================================
 
-MODEL_FILE = "models/personalization_model.pkl"
+BASE_DIR = Path(__file__).resolve().parents[1]
+MODEL_FILE = BASE_DIR / "models" / "personalization_model.pkl"
 
 CARDS = [
     "aqi",
