@@ -2,7 +2,7 @@ from typing import Any
 
 import pandas as pd
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.api_response import build_api_response
 from src.interaction_store import save_interaction
@@ -24,45 +24,56 @@ app = FastAPI(
 # ============================================================
 # Request model
 # ============================================================
+class WeatherFeatures(BaseModel):
+    city: str
+    timestamp: str
+    temperature_2m: float
+    relative_humidity_2m: float
+    apparent_temperature: float
+    precipitation: float
+    rain: float
+    weather_code: int
+    wind_speed_10m: float
+    soil_moisture_0_to_7cm: float
+    us_aqi: float
+    european_aqi: float
+    uv_index: float
+    pm2_5: float
+    pm10: float
+    nitrogen_dioxide: float
+    sulphur_dioxide: float
+    carbon_monoxide: float
+    ozone: float
+    is_daylight: bool
 
 class PersonalizationRequest(BaseModel):
     user_id: str
-    weather: dict
+    weather: WeatherFeatures
     persona: Literal["fitness", "farmer", "traveler"]
 
 class InteractionRequest(BaseModel):
     user_id: str
-    card_id: str
-    action: str
+    card_id: Literal[
+        "aqi",
+        "uv",
+        "temperature",
+        "humidity",
+        "rain",
+        "wind",
+        "soil_moisture",
+        "weather_condition"
+    ]
+    action: Literal[
+        "view",
+        "click",
+        "expand",
+        "dismiss"
+    ]
     timestamp: str
-    position: int
+    position: int = Field(ge=1, le=8)
     session_id: str
 
 
-REQUIRED_WEATHER_FIELDS = [
-    "city",
-    "timestamp",
-    "temperature_2m",
-    "relative_humidity_2m",
-    "apparent_temperature",
-    "precipitation",
-    "rain",
-    "weather_code",
-    "wind_speed_10m",
-    "soil_moisture_0_to_7cm",
-    "us_aqi",
-    "european_aqi",
-    "uv_index",
-    "pm2_5",
-    "pm10",
-    "nitrogen_dioxide",
-    "sulphur_dioxide",
-    "carbon_monoxide",
-    "ozone",
-    "sunrise",
-    "sunset",
-    "is_daylight"
-]
 
 
 # ============================================================
@@ -85,23 +96,9 @@ def root():
 def personalize(
     request: PersonalizationRequest
 ):
-    missing_fields = [
-        field
-        for field in REQUIRED_WEATHER_FIELDS
-        if field not in request.weather
-    ]
-
-    if missing_fields:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "message": "Incomplete weather data",
-                "missing_fields": missing_fields
-            }
-        )
-
+    
     weather_data = pd.Series(
-        request.weather
+        request.weather.model_dump()
     )
 
     interactions = get_user_interactions(
