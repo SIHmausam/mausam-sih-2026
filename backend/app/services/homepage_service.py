@@ -383,6 +383,13 @@ class HomepageService:
             my_day=my_day,
         )
 
+        await self.notification_evaluation_service.evaluate_environmental_conditions(
+            user_id=user_id,
+            location_id=location.id,
+            context=context,
+            target_date=target_date,
+        )
+
         today = self._find_today(
             context=context,
             target_date=target_date,
