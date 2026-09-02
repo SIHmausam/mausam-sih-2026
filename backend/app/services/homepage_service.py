@@ -378,6 +378,11 @@ class HomepageService:
             alerts=active_alerts,
         )
 
+        await self.notification_evaluation_service.evaluate_routine_impacts(
+            user_id=user_id,
+            my_day=my_day,
+        )
+
         today = self._find_today(
             context=context,
             target_date=target_date,
