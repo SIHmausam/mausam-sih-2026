@@ -129,7 +129,8 @@ def get_personalized_ranking(
     # --------------------------------------------------------
 
     behavior = build_preference_profile(
-        interactions
+        interactions,
+        reference_time=weather_data["timestamp"],
     )
 
     behavior = behavior[

@@ -25,12 +25,12 @@ def position_factor(position):
     Reduce the strength of an interaction when a card
     appeared lower on the homepage.
 
-    Position 0 = first card
-    Position 1 = second card
+    Backend position 1 = first card
+    Backend position 2 = second card
     etc.
     """
 
-    position = max(int(position), 0)
+    position = max(int(position) - 1, 0)
 
     return 1 / (1 + 0.15 * position)
 
@@ -86,7 +86,7 @@ def calculate_recency_weight(timestamp, reference_time):
 # Build user preference profile
 # ============================================================
 
-def build_preference_profile(interactions):
+def build_preference_profile(interactions, reference_time):
     """
     Convert raw interactions into stable 0–1 preference scores.
 
@@ -113,8 +113,6 @@ def build_preference_profile(interactions):
     interactions["timestamp"] = pd.to_datetime(
         interactions["timestamp"]
     )
-
-    reference_time = interactions["timestamp"].max()
 
     # --------------------------------------------------------
     # Interaction score
