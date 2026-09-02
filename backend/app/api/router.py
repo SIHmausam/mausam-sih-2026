@@ -7,6 +7,9 @@ from app.api.routes.alerts import (
     router as alerts_router,
 )
 from app.api.routes.auth import router as auth_router
+from app.api.routes.devices import (
+    router as devices_router,
+)
 from app.api.routes.homepage import (
     router as homepage_router,
 )
@@ -33,3 +36,4 @@ api_router.include_router(routines_router)
 api_router.include_router(interactions_router)
 api_router.include_router(homepage_router)
 api_router.include_router(notifications_router)
+api_router.include_router(devices_router)
