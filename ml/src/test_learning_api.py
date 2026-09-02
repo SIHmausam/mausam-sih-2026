@@ -7,7 +7,7 @@ from datetime import datetime
 # Configuration
 # ============================================================
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8001"
 
 USER_ID = "learning_test_user"
 PERSONA = "fitness"
