@@ -121,3 +121,47 @@ class NotificationService:
         await self.session.commit()
 
         return updated_count
+
+    async def create_notification_once(
+        self,
+        *,
+        user_id: uuid.UUID,
+        notification_type: NotificationType,
+        title: str,
+        message: str,
+        severity: NotificationSeverity = (NotificationSeverity.INFO),
+        source: str | None = None,
+        related_location_id: uuid.UUID | None = None,
+        source_reference: str | None = None,
+    ) -> tuple[Notification, bool]:
+        """
+        Create an idempotent notification.
+
+        Returns:
+            (notification, created)
+
+        created=False means this notification already existed.
+        """
+
+        if source_reference is not None:
+            existing = await self.repository.get_by_source_reference(
+                user_id=user_id,
+                notification_type=(notification_type.value),
+                source_reference=(source_reference),
+            )
+
+            if existing is not None:
+                return existing, False
+
+        notification = await self.create_notification(
+            user_id=user_id,
+            notification_type=(notification_type),
+            title=title,
+            message=message,
+            severity=severity,
+            source=source,
+            related_location_id=(related_location_id),
+            source_reference=(source_reference),
+        )
+
+        return notification, True

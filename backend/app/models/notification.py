@@ -8,6 +8,7 @@ from sqlalchemy import (
     Index,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import (
@@ -32,6 +33,12 @@ class Notification(Base):
             "ix_notifications_user_is_read",
             "user_id",
             "is_read",
+        ),
+        UniqueConstraint(
+            "user_id",
+            "notification_type",
+            "source_reference",
+            name="uq_notification_user_type_reference",
         ),
     )
 

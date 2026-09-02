@@ -119,6 +119,23 @@ class FakeNotificationRepository:
 
         return updated_count
 
+    async def get_by_source_reference(
+        self,
+        *,
+        user_id: uuid.UUID,
+        notification_type: str,
+        source_reference: str,
+    ) -> Notification | None:
+        for notification in self.notifications:
+            if (
+                notification.user_id == user_id
+                and notification.notification_type == notification_type
+                and notification.source_reference == source_reference
+            ):
+                return notification
+
+        return None
+
 
 def build_service() -> tuple[
     NotificationService,
@@ -504,3 +521,117 @@ async def test_all_notification_severities_are_supported(
     )
 
     assert notification.severity == severity.value
+
+
+async def get_by_source_reference(
+    self,
+    *,
+    user_id: uuid.UUID,
+    notification_type: str,
+    source_reference: str,
+) -> Notification | None:
+    for notification in self.notifications:
+        if (
+            notification.user_id == user_id
+            and notification.notification_type == notification_type
+            and notification.source_reference == source_reference
+        ):
+            return notification
+
+    return None
+
+
+@pytest.mark.asyncio
+async def test_create_notification_once_creates_first_time():
+    (
+        service,
+        _session,
+        repository,
+    ) = build_service()
+
+    user_id = uuid.uuid4()
+
+    notification, created = await service.create_notification_once(
+        user_id=user_id,
+        notification_type=(NotificationType.OFFICIAL_ALERT),
+        title="Severe weather warning",
+        message="Severe weather is active.",
+        severity=(NotificationSeverity.CRITICAL),
+        source="sachet",
+        source_reference="CAP-001",
+    )
+
+    assert created is True
+    assert notification.id is not None
+
+    assert len(repository.notifications) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_notification_once_deduplicates():
+    (
+        service,
+        _session,
+        repository,
+    ) = build_service()
+
+    user_id = uuid.uuid4()
+
+    first, first_created = await service.create_notification_once(
+        user_id=user_id,
+        notification_type=(NotificationType.OFFICIAL_ALERT),
+        title="Severe weather warning",
+        message="Severe weather is active.",
+        severity=(NotificationSeverity.CRITICAL),
+        source="sachet",
+        source_reference="CAP-001",
+    )
+
+    second, second_created = await service.create_notification_once(
+        user_id=user_id,
+        notification_type=(NotificationType.OFFICIAL_ALERT),
+        title="Severe weather warning",
+        message="Severe weather is active.",
+        severity=(NotificationSeverity.CRITICAL),
+        source="sachet",
+        source_reference="CAP-001",
+    )
+
+    assert first_created is True
+    assert second_created is False
+
+    assert first.id == second.id
+
+    assert len(repository.notifications) == 1
+
+
+@pytest.mark.asyncio
+async def test_same_alert_can_notify_different_users():
+    (
+        service,
+        _session,
+        repository,
+    ) = build_service()
+
+    first_user = uuid.uuid4()
+    second_user = uuid.uuid4()
+
+    await service.create_notification_once(
+        user_id=first_user,
+        notification_type=(NotificationType.OFFICIAL_ALERT),
+        title="Weather warning",
+        message="Warning active.",
+        source="sachet",
+        source_reference="CAP-001",
+    )
+
+    await service.create_notification_once(
+        user_id=second_user,
+        notification_type=(NotificationType.OFFICIAL_ALERT),
+        title="Weather warning",
+        message="Warning active.",
+        source="sachet",
+        source_reference="CAP-001",
+    )
+
+    assert len(repository.notifications) == 2

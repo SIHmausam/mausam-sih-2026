@@ -100,3 +100,20 @@ class NotificationRepository:
         )
 
         return result.rowcount or 0
+
+    async def get_by_source_reference(
+        self,
+        *,
+        user_id: uuid.UUID,
+        notification_type: str,
+        source_reference: str,
+    ) -> Notification | None:
+        result = await self.session.execute(
+            select(Notification).where(
+                Notification.user_id == user_id,
+                Notification.notification_type == notification_type,
+                Notification.source_reference == source_reference,
+            )
+        )
+
+        return result.scalar_one_or_none()
