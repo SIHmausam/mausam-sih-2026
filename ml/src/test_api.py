@@ -6,7 +6,7 @@ import pandas as pd
 # Configuration
 # ============================================================
 
-API_URL = "http://127.0.0.1:8000/personalize"
+API_URL = "http://127.0.0.1:8001/personalize"
 
 DATA_FILE = "data/processed/test.csv"
 
