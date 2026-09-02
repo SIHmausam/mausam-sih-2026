@@ -76,3 +76,18 @@ class RoutineImpactLevel(StrEnum):
     # Used only when there is not enough
     # environmental/location data to evaluate.
     UNAVAILABLE = "unavailable"
+
+
+class NotificationType(StrEnum):
+    OFFICIAL_ALERT = "official_alert"
+    ROUTINE_WARNING = "routine_warning"
+    RAIN_ALERT = "rain_alert"
+    AQI_ALERT = "aqi_alert"
+    DAILY_SUMMARY = "daily_summary"
+
+
+class NotificationSeverity(StrEnum):
+    INFO = "info"
+    CAUTION = "caution"
+    WARNING = "warning"
+    CRITICAL = "critical"
