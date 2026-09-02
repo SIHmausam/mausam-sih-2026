@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.integrations.personalization.base import (
     PersonalizationProvider,
 )
+from app.integrations.push.base import (
+    PushProvider,
+)
 from app.models.saved_location import SavedLocation
 from app.repositories.location_repository import (
     LocationRepository,
@@ -49,6 +52,7 @@ class HomepageService:
         weather_context_service: WeatherContextService,
         alert_service: AlertService,
         personalization_provider: PersonalizationProvider,
+        push_provider: PushProvider | None = None,
     ):
         self.location_repository = LocationRepository(session)
 
@@ -68,7 +72,10 @@ class HomepageService:
             personalization_provider=(personalization_provider),
         )
 
-        self.notification_evaluation_service = NotificationEvaluationService(session)
+        self.notification_evaluation_service = NotificationEvaluationService(
+            session=session,
+            push_provider=push_provider,
+        )
 
     async def _resolve_location(
         self,

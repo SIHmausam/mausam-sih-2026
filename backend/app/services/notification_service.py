@@ -14,6 +14,9 @@ from app.models.notification import Notification
 from app.repositories.notification_repository import (
     NotificationRepository,
 )
+from app.services.push_delivery_service import (
+    PushDeliveryService,
+)
 
 
 class NotificationNotFoundError(Exception):
@@ -24,10 +27,13 @@ class NotificationService:
     def __init__(
         self,
         session: AsyncSession,
+        push_delivery_service: (PushDeliveryService | None) = None,
     ):
         self.session = session
 
         self.repository = NotificationRepository(session)
+
+        self.push_delivery_service = push_delivery_service
 
     async def create_notification(
         self,
@@ -163,5 +169,16 @@ class NotificationService:
             related_location_id=(related_location_id),
             source_reference=(source_reference),
         )
+
+        # The notification has already been committed
+        # to PostgreSQL by create_notification().
+        #
+        # Push delivery is an additional best-effort
+        # delivery channel.
+        if self.push_delivery_service is not None:
+            await self.push_delivery_service.deliver_notification(
+                user_id=user_id,
+                notification=notification,
+            )
 
         return notification, True

@@ -8,6 +8,9 @@ from app.core.enums import (
     NotificationType,
     RoutineImpactLevel,
 )
+from app.integrations.push.base import (
+    PushProvider,
+)
 from app.repositories.preference_repository import (
     PreferenceRepository,
 )
@@ -17,16 +20,31 @@ from app.schemas.weather import WeatherContextResponse
 from app.services.notification_service import (
     NotificationService,
 )
+from app.services.push_delivery_service import (
+    PushDeliveryService,
+)
 
 
 class NotificationEvaluationService:
     def __init__(
         self,
         session: AsyncSession,
+        push_provider: PushProvider | None = None,
     ):
         self.preference_repository = PreferenceRepository(session)
 
-        self.notification_service = NotificationService(session)
+        push_delivery_service = None
+
+        if push_provider is not None:
+            push_delivery_service = PushDeliveryService(
+                session=session,
+                provider=push_provider,
+            )
+
+        self.notification_service = NotificationService(
+            session,
+            push_delivery_service=(push_delivery_service),
+        )
 
     @staticmethod
     def _is_severe_official_alert(

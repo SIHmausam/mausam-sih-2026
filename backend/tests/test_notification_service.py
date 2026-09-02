@@ -635,3 +635,95 @@ async def test_same_alert_can_notify_different_users():
     )
 
     assert len(repository.notifications) == 2
+
+
+class FakePushDeliveryService:
+    def __init__(self):
+        self.notifications = []
+
+    async def deliver_notification(
+        self,
+        *,
+        user_id: uuid.UUID,
+        notification: Notification,
+    ):
+        self.notifications.append(
+            (
+                user_id,
+                notification,
+            )
+        )
+
+    @pytest.mark.asyncio
+    async def test_new_notification_is_pushed():
+        (
+            service,
+            _session,
+            _repository,
+        ) = build_service()
+
+        push_service = FakePushDeliveryService()
+
+        service.push_delivery_service = push_service
+
+        user_id = uuid.uuid4()
+
+        notification, created = await service.create_notification_once(
+            user_id=user_id,
+            notification_type=(NotificationType.AQI_ALERT),
+            title="Unhealthy air quality",
+            message="AQI is 163.",
+            severity=(NotificationSeverity.WARNING),
+            source="open_meteo",
+            source_reference=("aqi:test:unhealthy"),
+        )
+
+        assert created is True
+
+        assert len(push_service.notifications) == 1
+
+        pushed_user_id, pushed = push_service.notifications[0]
+
+        assert pushed_user_id == user_id
+        assert pushed.id == notification.id
+
+    @pytest.mark.asyncio
+    async def test_duplicate_notification_is_not_pushed_again():
+        (
+            service,
+            _session,
+            repository,
+        ) = build_service()
+
+        push_service = FakePushDeliveryService()
+
+        service.push_delivery_service = push_service
+
+        user_id = uuid.uuid4()
+
+        first, first_created = await service.create_notification_once(
+            user_id=user_id,
+            notification_type=(NotificationType.OFFICIAL_ALERT),
+            title="Severe warning",
+            message="Warning active.",
+            source="sachet",
+            source_reference="CAP-001",
+        )
+
+        second, second_created = await service.create_notification_once(
+            user_id=user_id,
+            notification_type=(NotificationType.OFFICIAL_ALERT),
+            title="Severe warning",
+            message="Warning active.",
+            source="sachet",
+            source_reference="CAP-001",
+        )
+
+        assert first_created is True
+        assert second_created is False
+
+        assert first.id == second.id
+
+        assert len(repository.notifications) == 1
+
+        assert len(push_service.notifications) == 1
