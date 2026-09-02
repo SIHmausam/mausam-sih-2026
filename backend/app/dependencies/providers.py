@@ -25,6 +25,15 @@ from app.integrations.personalization.base import (
 from app.integrations.personalization.ml_api import (
     MLAPIPersonalizationProvider,
 )
+from app.integrations.push.base import (
+    PushProvider,
+)
+from app.integrations.push.disabled import (
+    DisabledPushProvider,
+)
+from app.integrations.push.firebase import (
+    FirebasePushProvider,
+)
 from app.integrations.weather.base import (
     WeatherProvider,
 )
@@ -118,4 +127,19 @@ def get_homepage_service(
         weather_context_service=(weather_context_service),
         alert_service=alert_service,
         personalization_provider=(personalization_provider),
+    )
+
+
+def get_push_provider() -> PushProvider:
+    if not (settings.push_notifications_enabled):
+        return DisabledPushProvider()
+
+    if not settings.firebase_project_id:
+        raise RuntimeError(
+            "FIREBASE_PROJECT_ID is required when push notifications are enabled"
+        )
+
+    return FirebasePushProvider(
+        project_id=(settings.firebase_project_id),
+        credentials_path=(settings.firebase_credentials_path),
     )

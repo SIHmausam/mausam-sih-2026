@@ -31,5 +31,11 @@ class Settings(BaseSettings):
 
     ml_request_timeout_seconds: float = 5.0
 
+    push_notifications_enabled: bool = False
+
+    firebase_project_id: str | None = None
+
+    firebase_credentials_path: str | None = None
+
 
 settings = Settings()
