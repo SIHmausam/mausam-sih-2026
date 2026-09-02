@@ -27,6 +27,9 @@ from app.schemas.weather import (
 )
 from app.services.alert_service import AlertService
 from app.services.my_day_service import MyDayService
+from app.services.notification_evaluation_service import (
+    NotificationEvaluationService,
+)
 from app.services.personalization_service import (
     PersonalizationService,
 )
@@ -64,6 +67,8 @@ class HomepageService:
             weather_context_service=(weather_context_service),
             personalization_provider=(personalization_provider),
         )
+
+        self.notification_evaluation_service = NotificationEvaluationService(session)
 
     async def _resolve_location(
         self,
@@ -366,6 +371,12 @@ class HomepageService:
 
         # Extreme → Severe → Moderate → Minor → Unknown.
         active_alerts.sort(key=self._severity_priority)
+
+        await self.notification_evaluation_service.evaluate_official_alerts(
+            user_id=user_id,
+            location_id=location.id,
+            alerts=active_alerts,
+        )
 
         today = self._find_today(
             context=context,
