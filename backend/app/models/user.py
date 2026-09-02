@@ -84,3 +84,15 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    notifications = relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    device_registrations = relationship(
+        "DeviceRegistration",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

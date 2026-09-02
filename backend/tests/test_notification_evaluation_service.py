@@ -1,0 +1,675 @@
+import uuid
+from datetime import UTC, date, datetime, time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
+from app.core.enums import (
+    ActivityContext,
+    NotificationSeverity,
+    NotificationType,
+    RoutineImpactLevel,
+)
+from app.schemas.alert import OfficialAlert
+from app.schemas.routine import (
+    MyDayResponse,
+    MyDayRoutineItem,
+    RoutineLocationSummary,
+)
+from app.services.notification_evaluation_service import (
+    NotificationEvaluationService,
+)
+
+
+class FakePreference:
+    def __init__(
+        self,
+        *,
+        official_alerts_enabled: bool = True,
+        routine_alerts_enabled: bool = True,
+        aqi_alerts_enabled: bool = True,
+        rain_alerts_enabled: bool = True,
+        daily_summary_enabled: bool = True,
+    ):
+        self.official_alerts_enabled = official_alerts_enabled
+
+        self.routine_alerts_enabled = routine_alerts_enabled
+
+        self.aqi_alerts_enabled = aqi_alerts_enabled
+
+        self.rain_alerts_enabled = rain_alerts_enabled
+
+        self.daily_summary_enabled = daily_summary_enabled
+
+
+def severe_alert() -> OfficialAlert:
+    return OfficialAlert(
+        identifier="CAP-SEVERE-001",
+        event="Thunderstorm",
+        headline=("Severe thunderstorm warning"),
+        description=("Severe thunderstorm conditions are expected."),
+        instruction=("Stay indoors and avoid open areas."),
+        severity="Severe",
+    )
+
+
+def moderate_alert() -> OfficialAlert:
+    return OfficialAlert(
+        identifier="CAP-MODERATE-001",
+        event="Thunderstorm",
+        severity="Moderate",
+    )
+
+
+def build_environment_context(
+    *,
+    aqi: int = 50,
+    rain: float = 0,
+    rain_probability: int = 0,
+    temperature: float = 28.0,
+):
+    return SimpleNamespace(
+        current=SimpleNamespace(
+            observed_at=datetime(
+                2026,
+                9,
+                2,
+                10,
+                0,
+                tzinfo=UTC,
+            ),
+            rain=rain,
+            temperature=temperature,
+        ),
+        air_quality=SimpleNamespace(
+            us_aqi=aqi,
+            aqi=aqi,
+        ),
+        daily=[
+            SimpleNamespace(
+                date="2026-09-02",
+                rain_probability_max=(rain_probability),
+            )
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_severe_alert_creates_notification():
+    service = NotificationEvaluationService(AsyncMock())
+
+    user_id = uuid.uuid4()
+    location_id = uuid.uuid4()
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(official_alerts_enabled=True)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    created = await service.evaluate_official_alerts(
+        user_id=user_id,
+        location_id=location_id,
+        alerts=[severe_alert()],
+    )
+
+    assert created == 1
+
+    (service.notification_service.create_notification_once.assert_awaited_once())
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["notification_type"] == NotificationType.OFFICIAL_ALERT
+
+    assert kwargs["severity"] == NotificationSeverity.WARNING
+
+    assert kwargs["source"] == "sachet"
+
+    assert kwargs["source_reference"] == "CAP-SEVERE-001"
+
+    assert kwargs["related_location_id"] == location_id
+
+
+@pytest.mark.asyncio
+async def test_extreme_alert_is_critical():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(official_alerts_enabled=True)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    alert = OfficialAlert(
+        identifier="CAP-EXTREME-001",
+        event="Cyclone",
+        severity="Extreme",
+    )
+
+    await service.evaluate_official_alerts(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        alerts=[alert],
+    )
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["severity"] == NotificationSeverity.CRITICAL
+
+
+@pytest.mark.asyncio
+async def test_moderate_alert_does_not_create_notification():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(official_alerts_enabled=True)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_official_alerts(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        alerts=[moderate_alert()],
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_disabled_official_notifications_are_skipped():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(official_alerts_enabled=False)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_official_alerts(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        alerts=[severe_alert()],
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_missing_preferences_are_skipped():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(return_value=None)
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_official_alerts(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        alerts=[severe_alert()],
+    )
+
+    assert created == 0
+
+
+def build_routine(
+    *,
+    impact: RoutineImpactLevel,
+) -> MyDayRoutineItem:
+    return MyDayRoutineItem(
+        routine_id=uuid.uuid4(),
+        name="Morning Run",
+        activity_context=(ActivityContext.OUTDOOR_HEALTH),
+        start_time=time(
+            hour=6,
+            minute=30,
+        ),
+        duration_minutes=60,
+        location=RoutineLocationSummary(
+            id=uuid.uuid4(),
+            label="Home",
+            city="Delhi",
+            latitude=28.6139,
+            longitude=77.2090,
+        ),
+        impact=impact,
+        reasons=[("Air quality may be unsuitable for prolonged outdoor activity.")],
+        recommendation=("Proceed carefully and review conditions before starting."),
+        weather=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_caution_routine_creates_notification():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(routine_alerts_enabled=True)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    routine = build_routine(impact=RoutineImpactLevel.CAUTION)
+
+    my_day = MyDayResponse(
+        date=date(2026, 9, 2),
+        routines=[routine],
+    )
+
+    created = await service.evaluate_routine_impacts(
+        user_id=uuid.uuid4(),
+        my_day=my_day,
+    )
+
+    assert created == 1
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["notification_type"] == NotificationType.ROUTINE_WARNING
+
+    assert kwargs["severity"] == NotificationSeverity.CAUTION
+
+    assert kwargs["source"] == "my_day"
+
+    assert kwargs["source_reference"] == (f"routine:{routine.routine_id}:2026-09-02")
+
+
+@pytest.mark.asyncio
+async def test_avoid_routine_uses_warning_severity():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    my_day = MyDayResponse(
+        date=date(2026, 9, 2),
+        routines=[build_routine(impact=RoutineImpactLevel.AVOID)],
+    )
+
+    await service.evaluate_routine_impacts(
+        user_id=uuid.uuid4(),
+        my_day=my_day,
+    )
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["severity"] == NotificationSeverity.WARNING
+
+
+@pytest.mark.asyncio
+async def test_safe_routine_does_not_notify():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    my_day = MyDayResponse(
+        date=date(2026, 9, 2),
+        routines=[build_routine(impact=RoutineImpactLevel.SAFE)],
+    )
+
+    created = await service.evaluate_routine_impacts(
+        user_id=uuid.uuid4(),
+        my_day=my_day,
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_disabled_routine_notifications_are_skipped():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(routine_alerts_enabled=False)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    my_day = MyDayResponse(
+        date=date(2026, 9, 2),
+        routines=[build_routine(impact=RoutineImpactLevel.CAUTION)],
+    )
+
+    created = await service.evaluate_routine_impacts(
+        user_id=uuid.uuid4(),
+        my_day=my_day,
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_unhealthy_aqi_creates_notification():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    location_id = uuid.uuid4()
+
+    created = await service.evaluate_environmental_conditions(
+        user_id=uuid.uuid4(),
+        location_id=location_id,
+        context=build_environment_context(aqi=163),
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 1
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["notification_type"] == NotificationType.AQI_ALERT
+
+    assert kwargs["severity"] == NotificationSeverity.WARNING
+
+    assert kwargs["source_reference"] == (f"aqi:{location_id}:2026-09-02:unhealthy")
+
+
+@pytest.mark.asyncio
+async def test_good_aqi_does_not_notify():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(rain_alerts_enabled=False)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_environmental_conditions(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(aqi=75),
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_high_rain_probability_creates_notification():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(aqi_alerts_enabled=False)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    location_id = uuid.uuid4()
+
+    created = await service.evaluate_environmental_conditions(
+        user_id=uuid.uuid4(),
+        location_id=location_id,
+        context=build_environment_context(rain_probability=96),
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 1
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["notification_type"] == NotificationType.RAIN_ALERT
+
+    assert kwargs["severity"] == NotificationSeverity.WARNING
+
+    assert kwargs["source_reference"] == (f"rain:{location_id}:2026-09-02")
+
+
+@pytest.mark.asyncio
+async def test_low_rain_probability_does_not_notify():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(aqi_alerts_enabled=False)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_environmental_conditions(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(rain_probability=30),
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_disabled_environmental_notifications_are_skipped():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(
+            aqi_alerts_enabled=False,
+            rain_alerts_enabled=False,
+        )
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_environmental_conditions(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(
+            aqi=200,
+            rain_probability=100,
+        ),
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_non_current_target_date_does_not_notify():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_environmental_conditions(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(
+            aqi=200,
+            rain_probability=100,
+        ),
+        target_date=date(
+            2026,
+            9,
+            3,
+        ),
+    )
+
+    assert created == 0
+
+
+@pytest.mark.asyncio
+async def test_daily_summary_is_created():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    user_id = uuid.uuid4()
+    location_id = uuid.uuid4()
+
+    my_day = MyDayResponse(
+        date=date(2026, 9, 2),
+        routines=[build_routine(impact=(RoutineImpactLevel.CAUTION))],
+    )
+
+    created = await service.evaluate_daily_summary(
+        user_id=user_id,
+        location_id=location_id,
+        context=build_environment_context(
+            aqi=163,
+            rain_probability=96,
+        ),
+        my_day=my_day,
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 1
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["notification_type"] == NotificationType.DAILY_SUMMARY
+
+    assert kwargs["severity"] == NotificationSeverity.INFO
+
+    assert kwargs["source"] == "mausam"
+
+    assert kwargs["source_reference"] == (f"daily_summary:{location_id}:2026-09-02")
+
+    assert "AQI" in kwargs["message"]
+    assert "96%" in kwargs["message"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_daily_summary_is_skipped():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(daily_summary_enabled=False)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_daily_summary(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(),
+        my_day=MyDayResponse(
+            date=date(2026, 9, 2),
+            routines=[],
+        ),
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_daily_summary_not_created_for_other_date():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_daily_summary(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(),
+        my_day=MyDayResponse(
+            date=date(2026, 9, 3),
+            routines=[],
+        ),
+        target_date=date(
+            2026,
+            9,
+            3,
+        ),
+    )
+
+    assert created == 0

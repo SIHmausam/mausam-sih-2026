@@ -7,11 +7,17 @@ from app.api.routes.alerts import (
     router as alerts_router,
 )
 from app.api.routes.auth import router as auth_router
+from app.api.routes.devices import (
+    router as devices_router,
+)
 from app.api.routes.homepage import (
     router as homepage_router,
 )
 from app.api.routes.interactions import router as interactions_router
 from app.api.routes.locations import router as locations_router
+from app.api.routes.notifications import (
+    router as notifications_router,
+)
 from app.api.routes.routines import (
     router as routines_router,
 )
@@ -29,3 +35,5 @@ api_router.include_router(alerts_router)
 api_router.include_router(routines_router)
 api_router.include_router(interactions_router)
 api_router.include_router(homepage_router)
+api_router.include_router(notifications_router)
+api_router.include_router(devices_router)
