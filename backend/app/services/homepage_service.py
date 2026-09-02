@@ -390,6 +390,14 @@ class HomepageService:
             target_date=target_date,
         )
 
+        await self.notification_evaluation_service.evaluate_daily_summary(
+            user_id=user_id,
+            location_id=location.id,
+            context=context,
+            my_day=my_day,
+            target_date=target_date,
+        )
+
         today = self._find_today(
             context=context,
             target_date=target_date,

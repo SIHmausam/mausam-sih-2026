@@ -459,3 +459,109 @@ class NotificationEvaluationService:
                     created_count += 1
 
         return created_count
+
+    async def evaluate_daily_summary(
+        self,
+        *,
+        user_id: uuid.UUID,
+        location_id: uuid.UUID,
+        context: WeatherContextResponse,
+        my_day: MyDayResponse,
+        target_date: date,
+    ) -> int:
+        """
+        Create one daily weather summary notification
+        per user/location/date.
+
+        This is currently generated during homepage refresh.
+        Later FCM/background scheduling can generate it
+        automatically in the morning.
+        """
+
+        preference = await self.preference_repository.get_preference(user_id)
+
+        if preference is None:
+            return 0
+
+        if not preference.daily_summary_enabled:
+            return 0
+
+        observed_at = context.current.observed_at
+
+        # Do not create summaries when viewing another date.
+        if observed_at is not None and observed_at.date() != target_date:
+            return 0
+
+        current_temperature = context.current.temperature
+
+        aqi: int | None = None
+
+        if context.air_quality is not None:
+            raw_aqi = (
+                context.air_quality.us_aqi
+                if context.air_quality.us_aqi is not None
+                else context.air_quality.aqi
+            )
+
+            if raw_aqi is not None:
+                aqi = round(raw_aqi)
+
+        today = self._daily_item_for_date(
+            context=context,
+            target_date=target_date,
+        )
+
+        rain_probability = today.rain_probability_max if today is not None else None
+
+        caution_count = sum(
+            1
+            for routine in my_day.routines
+            if routine.impact == RoutineImpactLevel.CAUTION
+        )
+
+        avoid_count = sum(
+            1
+            for routine in my_day.routines
+            if routine.impact == RoutineImpactLevel.AVOID
+        )
+
+        parts: list[str] = []
+
+        if current_temperature is not None:
+            parts.append(f"Current temperature is {current_temperature:.1f}°C.")
+
+        if aqi is not None:
+            parts.append(f"US AQI is {aqi}.")
+
+        if rain_probability is not None:
+            parts.append(f"Today's maximum rain probability is {rain_probability}%.")
+
+        if avoid_count > 0:
+            parts.append(
+                f"{avoid_count} planned "
+                f"{'routine is' if avoid_count == 1 else 'routines are'} "
+                f"recommended to be avoided."
+            )
+
+        if caution_count > 0:
+            parts.append(
+                f"{caution_count} planned "
+                f"{'routine needs' if caution_count == 1 else 'routines need'} "
+                f"caution."
+            )
+
+        if not parts:
+            parts.append("Your weather summary is ready.")
+
+        _, created = await self.notification_service.create_notification_once(
+            user_id=user_id,
+            notification_type=(NotificationType.DAILY_SUMMARY),
+            title="Today's weather summary",
+            message=" ".join(parts),
+            severity=(NotificationSeverity.INFO),
+            source="mausam",
+            related_location_id=location_id,
+            source_reference=(f"daily_summary:{location_id}:{target_date.isoformat()}"),
+        )
+
+        return 1 if created else 0

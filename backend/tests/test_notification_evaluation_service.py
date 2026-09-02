@@ -30,6 +30,7 @@ class FakePreference:
         routine_alerts_enabled: bool = True,
         aqi_alerts_enabled: bool = True,
         rain_alerts_enabled: bool = True,
+        daily_summary_enabled: bool = True,
     ):
         self.official_alerts_enabled = official_alerts_enabled
 
@@ -38,6 +39,8 @@ class FakePreference:
         self.aqi_alerts_enabled = aqi_alerts_enabled
 
         self.rain_alerts_enabled = rain_alerts_enabled
+
+        self.daily_summary_enabled = daily_summary_enabled
 
 
 def severe_alert() -> OfficialAlert:
@@ -64,6 +67,7 @@ def build_environment_context(
     aqi: int = 50,
     rain: float = 0,
     rain_probability: int = 0,
+    temperature: float = 28.0,
 ):
     return SimpleNamespace(
         current=SimpleNamespace(
@@ -76,6 +80,7 @@ def build_environment_context(
                 tzinfo=UTC,
             ),
             rain=rain,
+            temperature=temperature,
         ),
         air_quality=SimpleNamespace(
             us_aqi=aqi,
@@ -547,6 +552,118 @@ async def test_non_current_target_date_does_not_notify():
         context=build_environment_context(
             aqi=200,
             rain_probability=100,
+        ),
+        target_date=date(
+            2026,
+            9,
+            3,
+        ),
+    )
+
+    assert created == 0
+
+
+@pytest.mark.asyncio
+async def test_daily_summary_is_created():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        return_value=(
+            AsyncMock(),
+            True,
+        )
+    )
+
+    user_id = uuid.uuid4()
+    location_id = uuid.uuid4()
+
+    my_day = MyDayResponse(
+        date=date(2026, 9, 2),
+        routines=[build_routine(impact=(RoutineImpactLevel.CAUTION))],
+    )
+
+    created = await service.evaluate_daily_summary(
+        user_id=user_id,
+        location_id=location_id,
+        context=build_environment_context(
+            aqi=163,
+            rain_probability=96,
+        ),
+        my_day=my_day,
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 1
+
+    kwargs = service.notification_service.create_notification_once.await_args.kwargs
+
+    assert kwargs["notification_type"] == NotificationType.DAILY_SUMMARY
+
+    assert kwargs["severity"] == NotificationSeverity.INFO
+
+    assert kwargs["source"] == "mausam"
+
+    assert kwargs["source_reference"] == (f"daily_summary:{location_id}:2026-09-02")
+
+    assert "AQI" in kwargs["message"]
+    assert "96%" in kwargs["message"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_daily_summary_is_skipped():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(daily_summary_enabled=False)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_daily_summary(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(),
+        my_day=MyDayResponse(
+            date=date(2026, 9, 2),
+            routines=[],
+        ),
+        target_date=date(
+            2026,
+            9,
+            2,
+        ),
+    )
+
+    assert created == 0
+
+    (service.notification_service.create_notification_once.assert_not_awaited())
+
+
+@pytest.mark.asyncio
+async def test_daily_summary_not_created_for_other_date():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference()
+    )
+
+    service.notification_service.create_notification_once = AsyncMock()
+
+    created = await service.evaluate_daily_summary(
+        user_id=uuid.uuid4(),
+        location_id=uuid.uuid4(),
+        context=build_environment_context(),
+        my_day=MyDayResponse(
+            date=date(2026, 9, 3),
+            routines=[],
         ),
         target_date=date(
             2026,
