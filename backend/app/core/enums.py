@@ -91,3 +91,13 @@ class NotificationSeverity(StrEnum):
     CAUTION = "caution"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+class DevicePlatform(StrEnum):
+    ANDROID = "android"
+    IOS = "ios"
+
+
+class PushRegistrationType(StrEnum):
+    FID = "fid"
+    TOKEN = "token"
