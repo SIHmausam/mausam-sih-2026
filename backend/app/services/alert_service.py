@@ -1,6 +1,6 @@
 import asyncio
 import math
-from datetime import datetime
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qs, urlparse
 from xml.etree.ElementTree import Element
@@ -34,6 +34,7 @@ class AlertService:
 
     # Avoid sending a large burst of requests to SACHET.
     MAX_CAP_CONCURRENCY = 3
+    FEED_CACHE_TTL = 60
 
     def __init__(
         self,
@@ -111,6 +112,37 @@ class AlertService:
         return value or None
 
     @staticmethod
+    def _normalize_datetime(
+        value: datetime,
+    ) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+
+        return value.astimezone(UTC)
+
+    @classmethod
+    def _is_active_alert(
+        cls,
+        alert: OfficialAlert,
+        now: datetime,
+    ) -> bool:
+        start = alert.onset_at or alert.effective_at
+
+        if start is not None:
+            normalized_start = cls._normalize_datetime(start)
+
+            if normalized_start > now:
+                return False
+
+        if alert.expires_at is not None:
+            normalized_expiry = cls._normalize_datetime(alert.expires_at)
+
+            if normalized_expiry < now:
+                return False
+
+        return True
+
+    @staticmethod
     def _decode_redis_value(
         value: str | bytes | None,
     ) -> str | None:
@@ -165,6 +197,13 @@ class AlertService:
     async def get_feed(
         self,
     ) -> AlertFeedResponse:
+        cache_key = "alerts:rss:feed"
+
+        cached = await self.redis.get(cache_key)
+
+        if cached:
+            return AlertFeedResponse.model_validate_json(cached)
+
         xml = await self.provider.get_feed()
 
         root = ElementTree.fromstring(xml)
@@ -228,7 +267,15 @@ class AlertService:
                 )
             )
 
-        return AlertFeedResponse(alerts=items)
+        response = AlertFeedResponse(alerts=items)
+
+        await self.redis.set(
+            cache_key,
+            response.model_dump_json(),
+            ex=self.FEED_CACHE_TTL,
+        )
+
+        return response
 
     @classmethod
     def _select_info(
@@ -755,4 +802,16 @@ class AlertService:
 
         results = await asyncio.gather(*tasks)
 
-        return [alert for alert in results if alert is not None]
+        now = datetime.now(UTC)
+
+        return [
+            alert
+            for alert in results
+            if (
+                alert is not None
+                and self._is_active_alert(
+                    alert,
+                    now,
+                )
+            )
+        ]

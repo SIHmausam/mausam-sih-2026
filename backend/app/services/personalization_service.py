@@ -31,6 +31,9 @@ from app.schemas.personalization import (
     PersonalizationResult,
     PersonalizedCard,
 )
+from app.schemas.weather import (
+    WeatherContextResponse,
+)
 from app.services.weather_context_service import (
     WeatherContextService,
 )
@@ -124,8 +127,8 @@ class PersonalizationService:
             location_id=location_id,
         )
 
-        # User explicitly disabled personalized
-        # homepage ranking.
+        # Don't request weather at all when
+        # personalization has been disabled.
         if not preference.personalized_homepage_enabled:
             return self._fallback(
                 location=location,
@@ -136,6 +139,37 @@ class PersonalizationService:
             latitude=location.latitude,
             longitude=location.longitude,
         )
+
+        return await self.personalize_with_context(
+            user_id=user_id,
+            location=location,
+            context=context,
+        )
+
+    async def personalize_with_context(
+        self,
+        *,
+        user_id: uuid.UUID,
+        location,
+        context: WeatherContextResponse,
+    ) -> PersonalizationResult:
+        preference = await self.preference_repository.get_preference(user_id)
+
+        if preference is None:
+            raise (
+                PersonalizationPreferencesNotFoundError("User preferences not found")
+            )
+
+        if preference.persona is None:
+            raise (PersonalizationPersonaMissingError("User persona is not configured"))
+
+        persona = UserPersonaType(preference.persona)
+
+        if not preference.personalized_homepage_enabled:
+            return self._fallback(
+                location=location,
+                persona=persona,
+            )
 
         try:
             ml_request = MLFeatureBuilder.build(

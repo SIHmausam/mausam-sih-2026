@@ -70,6 +70,26 @@ class MyDayService:
             key=lambda item: abs(item.time.replace(tzinfo=None) - target),
         )
 
+    @staticmethod
+    def environment_key(
+        location,
+    ) -> tuple[
+        float,
+        float,
+        str,
+    ]:
+        return (
+            round(
+                location.latitude,
+                3,
+            ),
+            round(
+                location.longitude,
+                3,
+            ),
+            location.city.strip().casefold(),
+        )
+
     async def _resolve_location(
         self,
         user_id: uuid.UUID,
@@ -90,6 +110,7 @@ class MyDayService:
         self,
         user_id: uuid.UUID,
         target_date: date,
+        context_cache: dict | None = None,
     ) -> MyDayResponse:
         routines = await self.routine_repository.list_enabled_for_user(user_id=user_id)
 
@@ -103,10 +124,8 @@ class MyDayService:
 
         # Avoid rebuilding identical context multiple times
         # when several routines share a saved location.
-        context_cache: dict[
-            uuid.UUID,
-            tuple,
-        ] = {}
+        if context_cache is None:
+            context_cache = {}
 
         for routine in todays_routines:
             location = await self._resolve_location(
@@ -140,7 +159,9 @@ class MyDayService:
 
                 continue
 
-            cached = context_cache.get(location.id)
+            environment_key = self.environment_key(location)
+
+            cached = context_cache.get(environment_key)
 
             if cached is None:
                 context = await self.weather_context_service.get_context(
@@ -159,7 +180,7 @@ class MyDayService:
                     alerts,
                 )
 
-                context_cache[location.id] = cached
+                context_cache[environment_key] = cached
 
             context, alerts = cached
 
