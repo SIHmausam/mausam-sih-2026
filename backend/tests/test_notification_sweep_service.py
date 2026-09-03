@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -33,6 +33,20 @@ def build_context():
     )
 
 
+def build_my_day_service_mock():
+    service = AsyncMock()
+
+    service.environment_key = Mock(
+        return_value=(
+            28.614,
+            77.209,
+            "delhi",
+        )
+    )
+
+    return service
+
+
 def build_my_day():
     return SimpleNamespace(
         date=date(2026, 9, 3),
@@ -44,7 +58,7 @@ def build_my_day():
 async def test_candidate_runs_all_notification_evaluators():
     weather_service = AsyncMock()
     alert_service = AsyncMock()
-    my_day_service = AsyncMock()
+    my_day_service = build_my_day_service_mock()
     evaluation_service = AsyncMock()
 
     weather_service.get_context.return_value = build_context()
@@ -86,9 +100,21 @@ async def test_candidate_runs_all_notification_evaluators():
         city=candidate.city,
     )
 
+    expected_cache = {
+        (
+            28.614,
+            77.209,
+            "delhi",
+        ): (
+            weather_service.get_context.return_value,
+            [],
+        )
+    }
+
     my_day_service.get_my_day.assert_awaited_once_with(
         user_id=candidate.user_id,
         target_date=date(2026, 9, 3),
+        context_cache=expected_cache,
     )
 
     (evaluation_service.evaluate_official_alerts.assert_awaited_once())
@@ -104,7 +130,7 @@ async def test_candidate_runs_all_notification_evaluators():
 async def test_daily_summary_can_be_skipped():
     weather_service = AsyncMock()
     alert_service = AsyncMock()
-    my_day_service = AsyncMock()
+    my_day_service = build_my_day_service_mock()
     evaluation_service = AsyncMock()
 
     weather_service.get_context.return_value = build_context()
@@ -137,7 +163,7 @@ async def test_daily_summary_can_be_skipped():
 async def test_notification_counts_are_accumulated():
     weather_service = AsyncMock()
     alert_service = AsyncMock()
-    my_day_service = AsyncMock()
+    my_day_service = build_my_day_service_mock()
     evaluation_service = AsyncMock()
 
     weather_service.get_context.return_value = build_context()
@@ -170,7 +196,7 @@ async def test_notification_counts_are_accumulated():
 async def test_provider_failure_propagates_from_candidate():
     weather_service = AsyncMock()
     alert_service = AsyncMock()
-    my_day_service = AsyncMock()
+    my_day_service = build_my_day_service_mock()
     evaluation_service = AsyncMock()
 
     weather_service.get_context.side_effect = RuntimeError("weather unavailable")
@@ -197,7 +223,7 @@ async def test_provider_failure_propagates_from_candidate():
 async def test_sweep_continues_when_one_user_fails():
     weather_service = AsyncMock()
     alert_service = AsyncMock()
-    my_day_service = AsyncMock()
+    my_day_service = build_my_day_service_mock()
     evaluation_service = AsyncMock()
 
     service = NotificationSweepService(

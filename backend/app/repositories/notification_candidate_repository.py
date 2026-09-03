@@ -58,6 +58,7 @@ class NotificationCandidateRepository:
                     UserPreference.daily_summary_enabled.is_(True),
                 ),
             )
+            .order_by(UserPreference.user_id)
             .limit(limit)
             .offset(offset)
         )

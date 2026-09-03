@@ -4,6 +4,7 @@ from datetime import (
     datetime,
 )
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import (
@@ -135,7 +136,7 @@ class NotificationService:
         notification_type: NotificationType,
         title: str,
         message: str,
-        severity: NotificationSeverity = (NotificationSeverity.INFO),
+        severity: NotificationSeverity = NotificationSeverity.INFO,
         source: str | None = None,
         related_location_id: uuid.UUID | None = None,
         source_reference: str | None = None,
@@ -149,32 +150,58 @@ class NotificationService:
         created=False means this notification already existed.
         """
 
+        # Fast path:
+        # avoid attempting an INSERT when the notification
+        # is already present.
         if source_reference is not None:
             existing = await self.repository.get_by_source_reference(
                 user_id=user_id,
-                notification_type=(notification_type.value),
-                source_reference=(source_reference),
+                notification_type=notification_type.value,
+                source_reference=source_reference,
             )
 
             if existing is not None:
                 return existing, False
 
-        notification = await self.create_notification(
-            user_id=user_id,
-            notification_type=(notification_type),
-            title=title,
-            message=message,
-            severity=severity,
-            source=source,
-            related_location_id=(related_location_id),
-            source_reference=(source_reference),
-        )
+        try:
+            notification = await self.create_notification(
+                user_id=user_id,
+                notification_type=notification_type,
+                title=title,
+                message=message,
+                severity=severity,
+                source=source,
+                related_location_id=related_location_id,
+                source_reference=source_reference,
+            )
 
-        # The notification has already been committed
-        # to PostgreSQL by create_notification().
+        except IntegrityError:
+            # Another request/worker may have created the same
+            # notification between our lookup and INSERT.
+            await self.session.rollback()
+
+            if source_reference is None:
+                raise
+
+            existing = await self.repository.get_by_source_reference(
+                user_id=user_id,
+                notification_type=notification_type.value,
+                source_reference=source_reference,
+            )
+
+            # If the conflicting row is our expected duplicate,
+            # treat this as a successful idempotent operation.
+            if existing is not None:
+                return existing, False
+
+            # The IntegrityError came from some other DB constraint.
+            raise
+
+        # create_notification() has already committed
+        # the notification before we attempt push delivery.
         #
-        # Push delivery is an additional best-effort
-        # delivery channel.
+        # Push delivery is best-effort and must never determine
+        # whether the database notification exists.
         if self.push_delivery_service is not None:
             await self.push_delivery_service.deliver_notification(
                 user_id=user_id,

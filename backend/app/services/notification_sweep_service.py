@@ -2,6 +2,8 @@ import logging
 from dataclasses import dataclass
 from datetime import date
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.repositories.notification_candidate_repository import (
     NotificationCandidate,
 )
@@ -31,7 +33,8 @@ class NotificationSweepService:
         weather_context_service: WeatherContextService,
         alert_service: AlertService,
         my_day_service: MyDayService,
-        notification_evaluation_service: (NotificationEvaluationService),
+        notification_evaluation_service: NotificationEvaluationService,
+        session: AsyncSession | None = None,
     ):
         self.weather_context_service = weather_context_service
 
@@ -40,6 +43,8 @@ class NotificationSweepService:
         self.my_day_service = my_day_service
 
         self.notification_evaluation_service = notification_evaluation_service
+
+        self.session = session
 
     async def evaluate_candidate(
         self,
@@ -59,9 +64,17 @@ class NotificationSweepService:
             city=candidate.city,
         )
 
+        environment_cache = {
+            self.my_day_service.environment_key(candidate): (
+                context,
+                alerts,
+            )
+        }
+
         my_day = await self.my_day_service.get_my_day(
             user_id=candidate.user_id,
             target_date=target_date,
+            context_cache=environment_cache,
         )
 
         created_count = 0
@@ -125,6 +138,9 @@ class NotificationSweepService:
 
             except Exception:
                 failed_users += 1
+
+                if self.session is not None:
+                    await self.session.rollback()
 
                 logger.exception(
                     "Notification evaluation failed for user %s",
