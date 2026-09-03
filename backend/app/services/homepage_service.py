@@ -11,9 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.integrations.personalization.base import (
     PersonalizationProvider,
 )
-from app.integrations.push.base import (
-    PushProvider,
-)
 from app.models.saved_location import SavedLocation
 from app.repositories.location_repository import (
     LocationRepository,
@@ -30,9 +27,6 @@ from app.schemas.weather import (
 )
 from app.services.alert_service import AlertService
 from app.services.my_day_service import MyDayService
-from app.services.notification_evaluation_service import (
-    NotificationEvaluationService,
-)
 from app.services.personalization_service import (
     PersonalizationService,
 )
@@ -52,7 +46,6 @@ class HomepageService:
         weather_context_service: WeatherContextService,
         alert_service: AlertService,
         personalization_provider: PersonalizationProvider,
-        push_provider: PushProvider | None = None,
     ):
         self.location_repository = LocationRepository(session)
 
@@ -70,11 +63,6 @@ class HomepageService:
             session=session,
             weather_context_service=(weather_context_service),
             personalization_provider=(personalization_provider),
-        )
-
-        self.notification_evaluation_service = NotificationEvaluationService(
-            session=session,
-            push_provider=push_provider,
         )
 
     async def _resolve_location(
@@ -379,32 +367,6 @@ class HomepageService:
         # Extreme → Severe → Moderate → Minor → Unknown.
         active_alerts.sort(key=self._severity_priority)
 
-        await self.notification_evaluation_service.evaluate_official_alerts(
-            user_id=user_id,
-            location_id=location.id,
-            alerts=active_alerts,
-        )
-
-        await self.notification_evaluation_service.evaluate_routine_impacts(
-            user_id=user_id,
-            my_day=my_day,
-        )
-
-        await self.notification_evaluation_service.evaluate_environmental_conditions(
-            user_id=user_id,
-            location_id=location.id,
-            context=context,
-            target_date=target_date,
-        )
-
-        await self.notification_evaluation_service.evaluate_daily_summary(
-            user_id=user_id,
-            location_id=location.id,
-            context=context,
-            my_day=my_day,
-            target_date=target_date,
-        )
-
         today = self._find_today(
             context=context,
             target_date=target_date,
@@ -417,7 +379,7 @@ class HomepageService:
         return HomepageResponse(
             # Each homepage load gets a new session.
             #
-            # React Native sends this back with card
+            # Flutter sends this back with card
             # interactions.
             session_id=str(uuid.uuid4()),
             generated_at=now,
