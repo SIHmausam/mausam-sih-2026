@@ -116,10 +116,6 @@ def get_homepage_service(
         PersonalizationProvider,
         Depends(get_personalization_provider),
     ],
-    push_provider: Annotated[
-        PushProvider,
-        Depends(get_push_provider),
-    ],
 ) -> HomepageService:
     weather_service = WeatherService(
         provider=weather_provider,
@@ -146,20 +142,4 @@ def get_homepage_service(
         weather_context_service=(weather_context_service),
         alert_service=alert_service,
         personalization_provider=(personalization_provider),
-        push_provider=push_provider,
-    )
-
-
-def get_push_provider() -> PushProvider:
-    if not (settings.push_notifications_enabled):
-        return DisabledPushProvider()
-
-    if not settings.firebase_project_id:
-        raise RuntimeError(
-            "FIREBASE_PROJECT_ID is required when push notifications are enabled"
-        )
-
-    return FirebasePushProvider(
-        project_id=(settings.firebase_project_id),
-        credentials_path=(settings.firebase_credentials_path),
     )

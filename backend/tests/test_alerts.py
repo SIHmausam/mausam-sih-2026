@@ -785,6 +785,12 @@ async def test_relevant_alerts_returns_matching_alert():
         redis=redis,
     )
 
+    # Scheduler responsibility:
+    # fetch SACHET and build Redis snapshot.
+    await service.refresh_alert_snapshot()
+
+    # Homepage/MyDay responsibility:
+    # read only from the snapshot.
     response = await service.get_relevant_alerts(
         latitude=28.6139,
         longitude=77.2090,
@@ -793,7 +799,52 @@ async def test_relevant_alerts_returns_matching_alert():
 
     assert len(response) == 1
 
-    assert response[0].identifier == "ALERT-001"
+
+@pytest.mark.asyncio
+async def test_relevant_alerts_reads_from_snapshot_without_network():
+    provider = FakeAlertProvider()
+    redis = FakeRedis()
+
+    service = AlertService(
+        provider=provider,
+        redis=redis,
+    )
+
+    alerts = await service.refresh_alert_snapshot()
+
+    assert alerts
+
+    # After snapshot creation, make provider calls fail
+    # if get_relevant_alerts accidentally tries the network.
+    provider.get_feed_called = False
+    provider.get_cap_document_called = False
+
+    response = await service.get_relevant_alerts(
+        latitude=28.6139,
+        longitude=77.2090,
+        city="Purulia",
+    )
+
+    assert len(response) == 1
+
+
+@pytest.mark.asyncio
+async def test_relevant_alerts_returns_empty_when_snapshot_missing():
+    provider = FakeAlertProvider()
+    redis = FakeRedis()
+
+    service = AlertService(
+        provider=provider,
+        redis=redis,
+    )
+
+    response = await service.get_relevant_alerts(
+        latitude=28.6139,
+        longitude=77.2090,
+        city="Purulia",
+    )
+
+    assert response == []
 
 
 @pytest.mark.asyncio

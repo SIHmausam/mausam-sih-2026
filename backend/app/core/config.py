@@ -37,5 +37,15 @@ class Settings(BaseSettings):
 
     firebase_credentials_path: str | None = None
 
+    notification_scheduler_enabled: bool = False
+
+    notification_scheduler_interval_seconds: int = 900
+
+    notification_scheduler_batch_size: int = 100
+
+    notification_daily_summary_start_hour: int = 6
+
+    notification_daily_summary_end_hour: int = 10
+
 
 settings = Settings()

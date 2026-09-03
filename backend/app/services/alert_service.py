@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 from xml.etree.ElementTree import Element
 
 from defusedxml import ElementTree
+from pydantic import TypeAdapter
 from redis.asyncio import Redis
 
 from app.integrations.alerts.base import AlertProvider
@@ -25,6 +26,9 @@ class AlertCacheError(Exception):
     pass
 
 
+official_alert_snapshot_adapter = TypeAdapter(dict[str, OfficialAlert])
+
+
 class AlertService:
     # Keep CAP XML and ETag available for recovery/revalidation.
     CAP_CACHE_TTL = 21600  # 6 hours
@@ -36,6 +40,10 @@ class AlertService:
     MAX_CAP_CONCURRENCY = 3
     FEED_CACHE_TTL = 60
 
+    SNAPSHOT_KEY = "alerts:snapshot:official"
+
+    SNAPSHOT_REFRESHED_AT_KEY = "alerts:snapshot:refreshed_at"
+
     def __init__(
         self,
         provider: AlertProvider,
@@ -43,6 +51,96 @@ class AlertService:
     ):
         self.provider = provider
         self.redis = redis
+
+    async def get_cached_alert_snapshot(
+        self,
+    ) -> dict[str, OfficialAlert]:
+        cached = await self.redis.get(self.SNAPSHOT_KEY)
+
+        if cached is None:
+            return {}
+
+        try:
+            return official_alert_snapshot_adapter.validate_json(cached)
+
+        except ValueError:
+            return {}
+
+    async def refresh_alert_snapshot(
+        self,
+    ) -> list[OfficialAlert]:
+        feed = await self.get_feed()
+
+        existing_snapshot = await self.get_cached_alert_snapshot()
+
+        feed_identifiers = list(
+            dict.fromkeys(
+                item.identifier for item in feed.alerts if item.identifier is not None
+            )
+        )
+
+        semaphore = asyncio.Semaphore(self.MAX_CAP_CONCURRENCY)
+
+        async def fetch_alert(
+            feed_identifier: str,
+        ) -> tuple[
+            str,
+            OfficialAlert | None,
+        ]:
+            existing_alert = existing_snapshot.get(feed_identifier)
+
+            # Alert already exists in the latest
+            # normalized snapshot.
+            if existing_alert is not None:
+                return (
+                    feed_identifier,
+                    existing_alert,
+                )
+
+            async with semaphore:
+                try:
+                    alert = await self.get_alert(feed_identifier)
+
+                except (
+                    AlertCacheError,
+                    ValueError,
+                ):
+                    return (
+                        feed_identifier,
+                        None,
+                    )
+
+            return (
+                feed_identifier,
+                alert,
+            )
+
+        results = await asyncio.gather(
+            *[fetch_alert(identifier) for identifier in feed_identifiers]
+        )
+
+        # Only alerts still present in the current
+        # RSS feed remain in the snapshot.
+        snapshot = {
+            feed_identifier: alert
+            for (
+                feed_identifier,
+                alert,
+            ) in results
+            if alert is not None
+        }
+
+        await self.redis.set(
+            self.SNAPSHOT_KEY,
+            official_alert_snapshot_adapter.dump_json(snapshot),
+        )
+
+        await self.redis.set(
+            self.SNAPSHOT_REFRESHED_AT_KEY,
+            datetime.now(UTC).isoformat(),
+        )
+
+        return list(snapshot.values())
 
     @staticmethod
     def _text(
@@ -764,54 +862,34 @@ class AlertService:
         longitude: float,
         city: str | None = None,
     ) -> list[OfficialAlert]:
-        feed = await self.get_feed()
+        """
+        Return active official alerts relevant
+        to a location using the latest Redis
+        snapshot.
 
-        semaphore = asyncio.Semaphore(self.MAX_CAP_CONCURRENCY)
+        This method performs no SACHET network
+        requests.
+        """
 
-        async def fetch_and_match(
-            identifier: str,
-        ) -> OfficialAlert | None:
-            async with semaphore:
-                try:
-                    alert = await self.get_alert(identifier)
+        snapshot = await self.get_cached_alert_snapshot()
 
-                except (
-                    AlertCacheError,
-                    ValueError,
-                ):
-                    return None
-
-            if self.is_alert_relevant(
-                alert=alert,
-                latitude=latitude,
-                longitude=longitude,
-                city=city,
-            ):
-                return alert
-
-            return None
-
-        tasks = [
-            fetch_and_match(feed_item.identifier)
-            for feed_item in feed.alerts
-            if (feed_item.identifier is not None)
-        ]
-
-        if not tasks:
-            return []
-
-        results = await asyncio.gather(*tasks)
+        alerts = list(snapshot.values())
 
         now = datetime.now(UTC)
 
         return [
             alert
-            for alert in results
+            for alert in alerts
             if (
-                alert is not None
-                and self._is_active_alert(
+                self._is_active_alert(
                     alert,
                     now,
+                )
+                and self.is_alert_relevant(
+                    alert=alert,
+                    latitude=latitude,
+                    longitude=longitude,
+                    city=city,
                 )
             )
         ]
