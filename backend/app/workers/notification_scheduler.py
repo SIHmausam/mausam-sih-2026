@@ -117,6 +117,21 @@ async def run_single_sweep() -> None:
             redis=redis,
         )
 
+        try:
+            alerts = await alert_service.refresh_alert_snapshot()
+
+            logger.info(
+                "Official alert snapshot refreshed: alerts=%s",
+                len(alerts),
+            )
+
+        except Exception:
+            logger.exception(
+                "Official alert snapshot "
+                "refresh failed; continuing "
+                "with the previous snapshot"
+            )
+
         my_day_service = MyDayService(
             session=session,
             weather_context_service=(weather_context_service),
