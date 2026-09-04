@@ -27,6 +27,9 @@ def verify_password(
 
 def create_access_token(
     subject: str,
+    *,
+    session_id: str | None = None,
+    auth_version: int | None = None,
 ) -> str:
     expires_at = datetime.now(UTC) + timedelta(
         minutes=settings.access_token_expire_minutes
@@ -39,6 +42,12 @@ def create_access_token(
         "iat": datetime.now(UTC),
     }
 
+    if session_id is not None:
+        payload["sid"] = session_id
+
+    if auth_version is not None:
+        payload["av"] = auth_version
+
     return jwt.encode(
         payload,
         settings.secret_key,
@@ -48,6 +57,10 @@ def create_access_token(
 
 def create_refresh_token(
     subject: str,
+    *,
+    session_id: str | None = None,
+    family_id: str | None = None,
+    auth_version: int | None = None,
 ) -> tuple[str, str, datetime]:
     jti = str(uuid.uuid4())
 
@@ -60,6 +73,15 @@ def create_refresh_token(
         "exp": expires_at,
         "iat": datetime.now(UTC),
     }
+
+    if session_id is not None:
+        payload["sid"] = session_id
+
+    if family_id is not None:
+        payload["family"] = family_id
+
+    if auth_version is not None:
+        payload["av"] = auth_version
 
     token = jwt.encode(
         payload,

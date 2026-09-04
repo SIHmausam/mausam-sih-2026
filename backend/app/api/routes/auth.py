@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.redis import get_redis
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
@@ -163,5 +165,35 @@ async def logout(
     )
 
     await service.logout(payload.refresh_token)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/logout-all",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def logout_all(
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
+):
+    service = AuthService(
+        session=session,
+        redis=redis,
+    )
+
+    await service.logout_all(
+        user=current_user,
+    )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
