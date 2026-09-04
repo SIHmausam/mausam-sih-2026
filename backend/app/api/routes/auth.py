@@ -10,19 +10,29 @@ from fastapi import (
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db_session
 from app.core.redis import get_redis
 from app.dependencies.auth import get_current_user
+from app.dependencies.providers import (
+    get_email_provider,
+)
+from app.integrations.email.base import EmailProvider
 from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
+    MessageResponse,
     RefreshRequest,
     RegisterRequest,
+    ResendVerificationRequest,
     TokenResponse,
+    VerifyEmailRequest,
 )
-from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
+from app.services.email_verification_service import (
+    EmailVerificationService,
+)
 
 router = APIRouter(
     prefix="/auth",
@@ -32,8 +42,7 @@ router = APIRouter(
 
 @router.post(
     "/register",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
+    # keep your existing response/status definitions
 )
 async def register(
     payload: RegisterRequest,
@@ -45,24 +54,38 @@ async def register(
         Redis,
         Depends(get_redis),
     ],
+    email_provider: Annotated[
+        EmailProvider,
+        Depends(get_email_provider),
+    ],
 ):
+    email_verification_service = build_email_verification_service(
+        session=session,
+        redis=redis,
+        email_provider=email_provider,
+    )
+
     service = AuthService(
         session=session,
         redis=redis,
+        email_verification_service=(email_verification_service),
     )
 
     try:
-        return await service.register(
+        user = await service.register(
             name=payload.name,
-            email=payload.email,
+            email=str(payload.email),
             password=payload.password,
         )
-
     except ValueError as exc:
+        # Preserve whichever status code your
+        # current register route already uses.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+
+    return user
 
 
 @router.post(
@@ -100,9 +123,17 @@ async def login(
         )
 
     except ValueError as exc:
+        message = str(exc)
+
+        if message == ("Email verification required"):
+            raise HTTPException(
+                status_code=(status.HTTP_403_FORBIDDEN),
+                detail=message,
+            ) from exc
+
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
+            status_code=(status.HTTP_401_UNAUTHORIZED),
+            detail=message,
         ) from exc
 
 
@@ -197,3 +228,109 @@ async def logout_all(
     )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def build_email_verification_service(
+    *,
+    session: AsyncSession,
+    redis: Redis,
+    email_provider: EmailProvider,
+) -> EmailVerificationService:
+    return EmailVerificationService(
+        session=session,
+        redis=redis,
+        email_provider=email_provider,
+        verification_secret=(settings.email_verification_secret),
+        code_expire_minutes=(settings.email_verification_code_expire_minutes),
+        resend_cooldown_seconds=(settings.email_verification_resend_cooldown_seconds),
+        max_attempts=(settings.email_verification_max_attempts),
+    )
+
+
+@router.post(
+    "/email-verification/verify",
+    response_model=MessageResponse,
+)
+async def verify_email(
+    payload: VerifyEmailRequest,
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
+    email_provider: Annotated[
+        EmailProvider,
+        Depends(get_email_provider),
+    ],
+) -> MessageResponse:
+    service = build_email_verification_service(
+        session=session,
+        redis=redis,
+        email_provider=email_provider,
+    )
+
+    try:
+        await service.verify(
+            email=str(payload.email),
+            code=payload.code,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=(status.HTTP_400_BAD_REQUEST),
+            detail=str(exc),
+        ) from exc
+
+    return MessageResponse(message="Email verified successfully")
+
+
+@router.post(
+    "/email-verification/resend",
+    response_model=MessageResponse,
+)
+async def resend_email_verification(
+    payload: ResendVerificationRequest,
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
+    email_provider: Annotated[
+        EmailProvider,
+        Depends(get_email_provider),
+    ],
+) -> MessageResponse:
+    service = build_email_verification_service(
+        session=session,
+        redis=redis,
+        email_provider=email_provider,
+    )
+
+    try:
+        await service.resend(
+            email=str(payload.email),
+        )
+
+    except ValueError as exc:
+        if str(exc) == ("Verification code recently sent"):
+            raise HTTPException(
+                status_code=(status.HTTP_429_TOO_MANY_REQUESTS),
+                detail=str(exc),
+            ) from exc
+
+        raise HTTPException(
+            status_code=(status.HTTP_400_BAD_REQUEST),
+            detail=str(exc),
+        ) from exc
+
+    return MessageResponse(
+        message=(
+            "If the account requires verification, a verification code has been sent."
+        )
+    )
