@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,5 +61,16 @@ class UserRepository:
         user.password_hash = password_hash
 
         await self.session.flush()
+
+        return user
+
+    async def mark_email_verified(
+        self,
+        *,
+        user: User,
+    ) -> User:
+        if user.email_verified_at is None:
+            user.email_verified_at = datetime.now(UTC)
+            await self.session.flush()
 
         return user

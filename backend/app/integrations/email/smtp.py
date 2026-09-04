@@ -19,8 +19,8 @@ class SMTPEmailProvider(EmailProvider):
     ):
         self.host = host
         self.port = port
-        self.username = username
-        self.password = password
+        self.username = username or None
+        self.password = password or None
         self.from_email = from_email
         self.from_name = from_name
         self.use_tls = use_tls

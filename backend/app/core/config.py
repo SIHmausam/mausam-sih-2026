@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
 
+    email_verification_secret: str
     email_verification_code_expire_minutes: int = 15
     email_verification_resend_cooldown_seconds: int = 60
     email_verification_max_attempts: int = 5

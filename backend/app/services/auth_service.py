@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -16,7 +17,12 @@ from app.models.auth_session import AuthSession
 from app.models.user import User
 from app.repositories.auth_session_repository import AuthSessionRepository
 from app.repositories.user_repository import UserRepository
+from app.services.email_verification_service import (
+    EmailVerificationService,
+)
 from app.services.token_service import TokenService
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -24,11 +30,13 @@ class AuthService:
         self,
         session: AsyncSession,
         redis: Redis,
+        email_verification_service: (EmailVerificationService | None) = None,
     ):
         self.session = session
         self.repository = UserRepository(session)
         self.auth_session_repository = AuthSessionRepository(session)
         self.token_service = TokenService(redis)
+        self.email_verification_service = email_verification_service
 
     async def register(
         self,
@@ -47,9 +55,23 @@ class AuthService:
             name=name.strip(),
             email=email,
             password_hash=hash_password(password),
+            email_verified_at=None,
         )
 
-        return await self.repository.create(user)
+        user = await self.repository.create(user)
+
+        await self.session.commit()
+
+        if self.email_verification_service is not None:
+            try:
+                await self.email_verification_service.send_verification_code(user=user)
+            except Exception:
+                logger.exception(
+                    "Failed to send verification email for user_id=%s",
+                    user.id,
+                )
+
+        return user
 
     async def login(
         self,
@@ -71,6 +93,9 @@ class AuthService:
 
         if not user.is_active:
             raise ValueError("User account is disabled")
+
+        if user.email_verified_at is None:
+            raise ValueError("Email verification required")
 
         session_id = uuid.uuid4()
         family_id = uuid.uuid4()

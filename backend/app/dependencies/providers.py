@@ -19,6 +19,9 @@ from app.integrations.alerts.base import (
 from app.integrations.alerts.sachet import (
     SachetAlertProvider,
 )
+from app.integrations.email.base import EmailProvider
+from app.integrations.email.disabled import DisabledEmailProvider
+from app.integrations.email.smtp import SMTPEmailProvider
 from app.integrations.personalization.base import (
     PersonalizationProvider,
 )
@@ -142,4 +145,22 @@ def get_homepage_service(
         weather_context_service=(weather_context_service),
         alert_service=alert_service,
         personalization_provider=(personalization_provider),
+    )
+
+
+def get_email_provider() -> EmailProvider:
+    if not settings.email_delivery_enabled:
+        return DisabledEmailProvider()
+
+    if not settings.smtp_host or not settings.smtp_from_email:
+        raise RuntimeError("SMTP configuration is incomplete")
+
+    return SMTPEmailProvider(
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        username=settings.smtp_username,
+        password=settings.smtp_password,
+        from_email=settings.smtp_from_email,
+        from_name=settings.smtp_from_name,
+        use_tls=settings.smtp_use_tls,
     )
