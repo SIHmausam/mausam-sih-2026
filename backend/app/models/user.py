@@ -37,6 +37,11 @@ class User(Base):
         default=True,
     )
 
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     auth_version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

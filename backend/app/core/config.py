@@ -11,6 +11,20 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
 
+    email_verification_code_expire_minutes: int = 15
+    email_verification_resend_cooldown_seconds: int = 60
+    email_verification_max_attempts: int = 5
+
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_from_name: str = "Mausam"
+    smtp_use_tls: bool = True
+
+    email_delivery_enabled: bool = False
+
     redis_url: str = "redis://localhost:6379/0"
 
     model_config = SettingsConfigDict(
