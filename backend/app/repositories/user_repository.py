@@ -39,3 +39,26 @@ class UserRepository:
         await self.session.refresh(user)
 
         return user
+
+    async def increment_auth_version(
+        self,
+        *,
+        user: User,
+    ) -> int:
+        user.auth_version += 1
+
+        await self.session.flush()
+
+        return user.auth_version
+
+    async def update_password_hash(
+        self,
+        *,
+        user: User,
+        password_hash: str,
+    ) -> User:
+        user.password_hash = password_hash
+
+        await self.session.flush()
+
+        return user

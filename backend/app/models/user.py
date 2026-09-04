@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -35,6 +35,13 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
+    )
+
+    auth_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -93,6 +100,12 @@ class User(Base):
 
     device_registrations = relationship(
         "DeviceRegistration",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    auth_sessions = relationship(
+        "AuthSession",
         back_populates="user",
         cascade="all, delete-orphan",
     )
