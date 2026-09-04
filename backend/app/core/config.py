@@ -26,6 +26,12 @@ class Settings(BaseSettings):
 
     email_delivery_enabled: bool = False
 
+    password_reset_secret: str
+
+    password_reset_code_expire_minutes: int = 15
+    password_reset_resend_cooldown_seconds: int = 60
+    password_reset_max_attempts: int = 5
+
     redis_url: str = "redis://localhost:6379/0"
 
     model_config = SettingsConfigDict(
