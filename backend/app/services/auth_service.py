@@ -14,12 +14,8 @@ from app.core.security import (
 )
 from app.models.auth_session import AuthSession
 from app.models.user import User
-from app.repositories.auth_session_repository import (
-    AuthSessionRepository,
-)
-from app.repositories.user_repository import (
-    UserRepository,
-)
+from app.repositories.auth_session_repository import AuthSessionRepository
+from app.repositories.user_repository import UserRepository
 from app.services.token_service import TokenService
 
 
@@ -30,11 +26,8 @@ class AuthService:
         redis: Redis,
     ):
         self.session = session
-
         self.repository = UserRepository(session)
-
         self.auth_session_repository = AuthSessionRepository(session)
-
         self.token_service = TokenService(redis)
 
     async def register(
@@ -51,7 +44,7 @@ class AuthService:
             raise ValueError("Email already registered")
 
         user = User(
-            name=name,
+            name=name.strip(),
             email=email,
             password_hash=hash_password(password),
         )
@@ -67,7 +60,7 @@ class AuthService:
 
         user = await self.repository.get_by_email(email)
 
-        if not user:
+        if user is None:
             raise ValueError("Invalid credentials")
 
         if not verify_password(
@@ -129,7 +122,6 @@ class AuthService:
     ) -> tuple[str, str]:
         try:
             payload = decode_token(refresh_token)
-
         except jwt.InvalidTokenError as exc:
             raise ValueError("Invalid or expired refresh token") from exc
 
@@ -152,14 +144,15 @@ class AuthService:
             raise ValueError("Invalid refresh token")
 
         try:
-            user_uuid = uuid.UUID(user_id)
-
-            session_uuid = uuid.UUID(session_id)
-
-            family_uuid = uuid.UUID(family_id)
-
+            user_uuid = uuid.UUID(str(user_id))
+            session_uuid = uuid.UUID(str(session_id))
+            family_uuid = uuid.UUID(str(family_id))
         except ValueError as exc:
             raise ValueError("Invalid refresh token") from exc
+
+        user_id = str(user_uuid)
+        session_id = str(session_uuid)
+        family_id = str(family_uuid)
 
         user = await self.repository.get_by_id(user_uuid)
 
@@ -173,7 +166,7 @@ class AuthService:
             raise ValueError("Refresh token has been revoked")
 
         auth_session = await self.auth_session_repository.get_by_id(
-            session_id=session_uuid,
+            session_id=session_uuid
         )
 
         if auth_session is None:
@@ -194,60 +187,53 @@ class AuthService:
             raise ValueError("Refresh session has expired")
 
         family_revoked = await self.token_service.is_refresh_family_revoked(
-            family_id=family_id,
+            family_id=family_id
         )
 
         if family_revoked:
             raise ValueError("Refresh family has been revoked")
 
-        active_token = await self.token_service.get_active_refresh_token(
-            jti=jti,
-        )
+        active_token = await self.token_service.get_active_refresh_token(jti=jti)
 
-        if active_token is None:
-            consumed = await self.token_service.is_refresh_token_consumed(
-                jti=jti,
-            )
-
-            if consumed:
-                await self.token_service.revoke_refresh_family(
-                    family_id=family_id,
-                    expires_at=(auth_session.expires_at),
-                )
-
-                await self.auth_session_repository.revoke(
-                    auth_session=(auth_session),
-                )
-
-                await self.session.commit()
-
-                raise ValueError("Refresh token reuse detected")
-
-            raise ValueError("Refresh token has been revoked")
-
-        if active_token.get("user_id") != user_id:
+        if active_token is not None and (
+            active_token.get("user_id") != user_id
+            or active_token.get("session_id") != session_id
+            or active_token.get("family_id") != family_id
+        ):
             raise ValueError("Invalid refresh token")
 
-        if active_token.get("session_id") != session_id:
-            raise ValueError("Invalid refresh token")
-
-        if active_token.get("family_id") != family_id:
-            raise ValueError("Invalid refresh token")
-
-        await self.token_service.mark_refresh_token_consumed(
+        consume_result = await self.token_service.consume_refresh_token(
             jti=jti,
             family_id=family_id,
-            expires_at=(auth_session.expires_at),
+            expires_at=auth_session.expires_at,
         )
 
-        await self.auth_session_repository.touch(
-            auth_session=auth_session,
-        )
+        if consume_result == "reused":
+            await self.token_service.revoke_refresh_family(
+                family_id=family_id,
+                expires_at=auth_session.expires_at,
+            )
+
+            await self.auth_session_repository.revoke(auth_session=auth_session)
+
+            await self.session.commit()
+
+            raise ValueError("Refresh token reuse detected")
+
+        # Token was never active or its active state has already
+        # disappeared.
+        if consume_result == "missing":
+            raise ValueError("Refresh token has been revoked")
+
+        if consume_result != "consumed":
+            raise ValueError("Invalid refresh token")
+
+        await self.auth_session_repository.touch(auth_session=auth_session)
 
         new_access_token = create_access_token(
             user_id,
             session_id=session_id,
-            auth_version=(user.auth_version),
+            auth_version=user.auth_version,
         )
 
         (
@@ -258,7 +244,7 @@ class AuthService:
             user_id,
             session_id=session_id,
             family_id=family_id,
-            auth_version=(user.auth_version),
+            auth_version=user.auth_version,
         )
 
         auth_session.expires_at = new_refresh_expires_at
@@ -268,7 +254,7 @@ class AuthService:
             user_id=user_id,
             session_id=session_id,
             family_id=family_id,
-            expires_at=(new_refresh_expires_at),
+            expires_at=new_refresh_expires_at,
         )
 
         await self.session.commit()
@@ -284,56 +270,49 @@ class AuthService:
     ) -> None:
         try:
             payload = decode_token(refresh_token)
-
         except jwt.InvalidTokenError:
             return
 
         if payload.get("type") != "refresh":
             return
 
+        user_id = payload.get("sub")
         jti = payload.get("jti")
         session_id = payload.get("sid")
         family_id = payload.get("family")
 
-        if not session_id or not family_id:
-            if jti:
-                await self.token_service.revoke_refresh_token(jti)
-
+        if not user_id or not session_id or not family_id:
             return
 
         try:
-            session_uuid = uuid.UUID(session_id)
-
-            family_uuid = uuid.UUID(family_id)
-
+            user_uuid = uuid.UUID(str(user_id))
+            session_uuid = uuid.UUID(str(session_id))
+            family_uuid = uuid.UUID(str(family_id))
         except ValueError:
             return
 
         auth_session = await self.auth_session_repository.get_by_id(
-            session_id=session_uuid,
+            session_id=session_uuid
         )
 
         if auth_session is None:
+            return
+
+        if auth_session.user_id != user_uuid:
             return
 
         if auth_session.family_id != family_uuid:
             return
 
         await self.token_service.revoke_refresh_family(
-            family_id=family_id,
-            expires_at=(auth_session.expires_at),
+            family_id=str(family_uuid),
+            expires_at=auth_session.expires_at,
         )
 
         if jti:
-            await self.token_service.mark_refresh_token_consumed(
-                jti=jti,
-                family_id=family_id,
-                expires_at=(auth_session.expires_at),
-            )
+            await self.token_service.remove_active_refresh_token(jti=jti)
 
-        await self.auth_session_repository.revoke(
-            auth_session=auth_session,
-        )
+        await self.auth_session_repository.revoke(auth_session=auth_session)
 
         await self.session.commit()
 
@@ -343,26 +322,21 @@ class AuthService:
         user: User,
     ) -> None:
         active_sessions = await self.auth_session_repository.list_active_for_user(
-            user_id=user.id,
+            user_id=user.id
         )
 
-        # Add a revoked-family marker for every
-        # currently active refresh-token family.
+        # Mark every active refresh family as revoked in Redis.
         for auth_session in active_sessions:
             await self.token_service.revoke_refresh_family(
                 family_id=str(auth_session.family_id),
-                expires_at=(auth_session.expires_at),
+                expires_at=auth_session.expires_at,
             )
 
-        # Revoke every DB authentication session.
-        await self.auth_session_repository.revoke_all_for_user(
-            user_id=user.id,
-        )
+        # Revoke every DB session belonging to the user.
+        await self.auth_session_repository.revoke_all_for_user(user_id=user.id)
 
-        # Invalidates every previously issued
-        # access AND refresh token via the "av" claim.
-        await self.repository.increment_auth_version(
-            user=user,
-        )
+        # Incrementing auth_version invalidates every old
+        # access/refresh token containing the previous "av".
+        await self.repository.increment_auth_version(user=user)
 
         await self.session.commit()
