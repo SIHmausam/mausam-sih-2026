@@ -20,18 +20,23 @@ from app.dependencies.providers import (
 from app.integrations.email.base import EmailProvider
 from app.models.user import User
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     LogoutRequest,
     MessageResponse,
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenResponse,
     VerifyEmailRequest,
 )
 from app.services.auth_service import AuthService
 from app.services.email_verification_service import (
     EmailVerificationService,
+)
+from app.services.password_reset_service import (
+    PasswordResetService,
 )
 
 router = APIRouter(
@@ -245,6 +250,115 @@ def build_email_verification_service(
         resend_cooldown_seconds=(settings.email_verification_resend_cooldown_seconds),
         max_attempts=(settings.email_verification_max_attempts),
     )
+
+
+def build_password_reset_service(
+    *,
+    session: AsyncSession,
+    redis: Redis,
+    email_provider: EmailProvider,
+) -> PasswordResetService:
+    return PasswordResetService(
+        session=session,
+        redis=redis,
+        email_provider=email_provider,
+        reset_secret=settings.password_reset_secret,
+        code_expire_minutes=(settings.password_reset_code_expire_minutes),
+        resend_cooldown_seconds=(settings.password_reset_resend_cooldown_seconds),
+        max_attempts=(settings.password_reset_max_attempts),
+    )
+
+
+@router.post(
+    "/password/forgot",
+    response_model=MessageResponse,
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
+    email_provider: Annotated[
+        EmailProvider,
+        Depends(get_email_provider),
+    ],
+) -> MessageResponse:
+    service = build_password_reset_service(
+        session=session,
+        redis=redis,
+        email_provider=email_provider,
+    )
+
+    try:
+        await service.request_reset(
+            email=str(payload.email),
+        )
+    except ValueError as exc:
+        if str(exc) != ("Password reset code recently sent"):
+            raise
+
+        # Keep the response generic.
+        #
+        # Returning 429 only for real accounts
+        # could reveal whether an email exists.
+
+    return MessageResponse(
+        message=("If an account exists, password reset instructions have been sent.")
+    )
+
+
+@router.post(
+    "/password/reset",
+    response_model=MessageResponse,
+)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
+    email_provider: Annotated[
+        EmailProvider,
+        Depends(get_email_provider),
+    ],
+) -> MessageResponse:
+    service = build_password_reset_service(
+        session=session,
+        redis=redis,
+        email_provider=email_provider,
+    )
+
+    try:
+        await service.reset_password(
+            email=str(payload.email),
+            code=payload.code,
+            new_password=payload.new_password,
+        )
+
+    except ValueError as exc:
+        message = str(exc)
+
+        if message == ("Too many password reset attempts"):
+            raise HTTPException(
+                status_code=(status.HTTP_429_TOO_MANY_REQUESTS),
+                detail=message,
+            ) from exc
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message,
+        ) from exc
+
+    return MessageResponse(message="Password reset successfully")
 
 
 @router.post(
