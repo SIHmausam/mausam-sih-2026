@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "292269318521",
+    "project_id": "mausam-fe6bb",
+    "storage_bucket": "mausam-fe6bb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:292269318521:android:eda8d7c485636509260fa8",
+        "android_client_info": {
+          "package_name": "com.example.mausam_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkHZlirK1wLwZ_qtwlMQZ8SAzoG9M1FW0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
