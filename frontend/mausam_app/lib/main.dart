@@ -10,6 +10,12 @@ import 'services/weather_code_mapper.dart';
 import 'widgets/priority_card.dart';
 import 'widgets/weather_effects.dart';
 
+import 'config/app_config.dart';
+import 'services/google_auth_service.dart';
+import 'services/auth_api_service.dart';
+import 'services/token_storage_service.dart';
+import 'services/auth_session_service.dart';
+
 void main() {
   runApp(const MausamApp());
 }
@@ -43,6 +49,8 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _cloudOne;
   late final Animation<double> _cloudTwo;
   late final Animation<double> _cloudThree;
+  final AuthSessionService _authSessionService =
+    AuthSessionService();
 
   @override
   void initState() {
@@ -78,25 +86,53 @@ class _SplashScreenState extends State<SplashScreen>
       end: 1.10,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
-    Future.delayed(const Duration(milliseconds: 3500), () {
-      if (!mounted) return;
+    _restoreSessionAndContinue();
+  }
 
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const OnboardingScreen(),
-          transitionDuration: const Duration(milliseconds: 700),
-          transitionsBuilder: (_, animation, __, child) {
-            return FadeTransition(
-              opacity: CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeInOut,
-              ),
-              child: child,
-            );
-          },
-        ),
-      );
-    });
+  Future<void> _restoreSessionAndContinue() async {
+    // Keep the splash visible for a short minimum duration
+    // while session restoration happens.
+    final results = await Future.wait([
+      _authSessionService.restoreSession(),
+      Future<void>.delayed(
+        const Duration(milliseconds: 2500),
+      ),
+    ]);
+
+    if (!mounted) {
+      return;
+    }
+
+    final isAuthenticated = results.first as bool;
+
+    final Widget nextScreen;
+
+    if (isAuthenticated) {
+      // Temporary destination.
+      // Later we will load the user's saved persona/profile
+      // from the backend and go directly to MainShell.
+      nextScreen = const PersonaSelectionScreen();
+    } else {
+      nextScreen = const OnboardingScreen();
+    }
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => nextScreen,
+        transitionDuration:
+            const Duration(milliseconds: 700),
+        transitionsBuilder:
+            (_, animation, _, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOut,
+            ),
+            child: child,
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -3177,6 +3213,16 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final GoogleAuthService _googleAuthService =
+      GoogleAuthService(
+    serverClientId: AppConfig.googleServerClientId,
+  );
+  final AuthApiService _authApiService =
+    AuthApiService();
+  final TokenStorageService _tokenStorageService =
+    TokenStorageService();
+
+  bool _isGoogleSigningIn = false;
 
   bool _obscurePassword = true;
 
@@ -3204,6 +3250,67 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _openSignUp() {
     Navigator.of(context).push(_darkRoute(page: const SignUpScreen()));
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    if (AppConfig.googleServerClientId.isEmpty) {
+      _showMessage(
+        'Google Server Client ID is not configured.',
+      );
+      return;
+    }
+
+    if (_isGoogleSigningIn) {
+      return;
+    }
+
+    setState(() {
+      _isGoogleSigningIn = true;
+    });
+
+    try {
+      final googleIdToken =
+          await _googleAuthService
+              .signInAndGetIdToken();
+
+      final tokens =
+          await _authApiService.loginWithGoogle(
+        idToken: googleIdToken,
+      );
+
+      await _tokenStorageService.saveTokens(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(
+        'Mausam login successful.',
+      );
+
+      Navigator.of(context).pushReplacement(
+        _darkRoute(
+          page: const PersonaSelectionScreen(),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(
+        'Login failed: $error',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGoogleSigningIn = false;
+        });
+      }
+    }
   }
 
   @override
@@ -3352,9 +3459,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   _AuthSecondaryButton(
                     label: 'Continue with Google',
                     icon: Icons.g_mobiledata_rounded,
-                    onPressed: () {
-                      _showMessage('Google Sign-In will be connected next.');
-                    },
+                    onPressed:
+                        _isGoogleSigningIn
+                            ? null
+                            : _handleGoogleSignIn,
                   ),
 
                   const SizedBox(height: 28),
@@ -3692,7 +3800,7 @@ class _AuthPrimaryButton extends StatelessWidget {
 class _AuthSecondaryButton extends StatelessWidget {
   final String label;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _AuthSecondaryButton({
     required this.label,
