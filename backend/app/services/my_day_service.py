@@ -71,6 +71,37 @@ class MyDayService:
         )
 
     @staticmethod
+    def _find_hourly_air_quality(
+        hourly_air_quality,
+        target_date: date,
+        start_time,
+    ):
+        if not hourly_air_quality:
+            return None
+
+        target = datetime.combine(
+            target_date,
+            start_time,
+        )
+
+        return min(
+            hourly_air_quality,
+            key=lambda item: abs(item.time.replace(tzinfo=None) - target),
+        )
+
+    @staticmethod
+    def _normalized_hourly_aqi(
+        hourly_air_quality,
+    ) -> float | None:
+        if hourly_air_quality is None:
+            return None
+
+        if hourly_air_quality.us_aqi is not None:
+            return hourly_air_quality.us_aqi
+
+        return hourly_air_quality.european_aqi
+
+    @staticmethod
     def environment_key(
         location,
     ) -> tuple[
@@ -190,6 +221,31 @@ class MyDayService:
                 start_time=routine.start_time,
             )
 
+            hourly_air_quality = self._find_hourly_air_quality(
+                hourly_air_quality=(context.hourly_air_quality),
+                target_date=target_date,
+                start_time=routine.start_time,
+            )
+
+            hourly_aqi = self._normalized_hourly_aqi(hourly_air_quality)
+
+            current_aqi = context.air_quality.aqi if context.air_quality else None
+
+            current_uv_index = (
+                context.air_quality.uv_index if context.air_quality else None
+            )
+
+            routine_aqi = hourly_aqi if hourly_aqi is not None else current_aqi
+
+            routine_uv_index = (
+                hourly_air_quality.uv_index
+                if (
+                    hourly_air_quality is not None
+                    and hourly_air_quality.uv_index is not None
+                )
+                else current_uv_index
+            )
+
             weather = RoutineWeatherSnapshot(
                 temperature=(
                     hourly.temperature if hourly else context.current.temperature
@@ -212,10 +268,8 @@ class MyDayService:
                 visibility=(
                     hourly.visibility if hourly else context.current.visibility
                 ),
-                aqi=(context.air_quality.aqi if context.air_quality else None),
-                uv_index=(
-                    context.air_quality.uv_index if context.air_quality else None
-                ),
+                aqi=routine_aqi,
+                uv_index=routine_uv_index,
                 surface_soil_moisture=(
                     context.agriculture.surface_soil_moisture
                     if context.agriculture
