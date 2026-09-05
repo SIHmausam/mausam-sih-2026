@@ -13,8 +13,16 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.integrations.google_auth import (
+    GoogleIdentity,
+    GoogleTokenVerifier,
+)
+from app.models.auth_identity import AuthIdentity
 from app.models.auth_session import AuthSession
 from app.models.user import User
+from app.repositories.auth_identity_repository import (
+    AuthIdentityRepository,
+)
 from app.repositories.auth_session_repository import AuthSessionRepository
 from app.repositories.user_repository import UserRepository
 from app.services.email_verification_service import (
@@ -35,6 +43,7 @@ class AuthService:
         self.session = session
         self.repository = UserRepository(session)
         self.auth_session_repository = AuthSessionRepository(session)
+        self.auth_identity_repository = AuthIdentityRepository(session)
         self.token_service = TokenService(redis)
         self.email_verification_service = email_verification_service
 
@@ -365,3 +374,157 @@ class AuthService:
         await self.repository.increment_auth_version(user=user)
 
         await self.session.commit()
+
+    async def _create_authenticated_session(
+        self,
+        *,
+        user: User,
+    ) -> tuple[str, str]:
+        session_id = uuid.uuid4()
+        family_id = uuid.uuid4()
+
+        access_token = create_access_token(
+            str(user.id),
+            session_id=str(session_id),
+            auth_version=user.auth_version,
+        )
+
+        (
+            refresh_token,
+            refresh_jti,
+            refresh_expires_at,
+        ) = create_refresh_token(
+            str(user.id),
+            session_id=str(session_id),
+            family_id=str(family_id),
+            auth_version=user.auth_version,
+        )
+
+        auth_session = AuthSession(
+            id=session_id,
+            user_id=user.id,
+            family_id=family_id,
+            expires_at=refresh_expires_at,
+        )
+
+        await self.auth_session_repository.create(auth_session)
+
+        await self.token_service.store_session_refresh_token(
+            jti=refresh_jti,
+            user_id=str(user.id),
+            session_id=str(session_id),
+            family_id=str(family_id),
+            expires_at=refresh_expires_at,
+        )
+
+        await self.session.commit()
+
+        return (
+            access_token,
+            refresh_token,
+        )
+
+    async def google_login(
+        self,
+        *,
+        id_token: str,
+        verifier: GoogleTokenVerifier,
+    ) -> tuple[str, str]:
+        google_identity = await verifier.verify(id_token)
+
+        user = await self._resolve_google_user(google_identity=google_identity)
+
+        if not user.is_active:
+            raise ValueError("User account is disabled")
+
+        return await self._create_authenticated_session(user=user)
+
+    async def _resolve_google_user(
+        self,
+        *,
+        google_identity: GoogleIdentity,
+    ) -> User:
+        existing_identity = await self.auth_identity_repository.get_by_provider_subject(
+            provider="google",
+            provider_subject=(google_identity.subject),
+        )
+
+        # =====================================================
+        # Google account already linked
+        # =====================================================
+
+        if existing_identity is not None:
+            user = await self.repository.get_by_id(existing_identity.user_id)
+
+            if user is None:
+                raise ValueError("Invalid Google account")
+
+            return user
+
+        # =====================================================
+        # No Google identity yet.
+        #
+        # Check whether Mausam already has the same verified
+        # email through password authentication.
+        # =====================================================
+
+        user = await self.repository.get_by_email(google_identity.email)
+
+        if user is not None:
+            if not user.is_active:
+                raise ValueError("User account is disabled")
+
+            existing_google_identity = (
+                await self.auth_identity_repository.get_for_user_provider(
+                    user_id=user.id,
+                    provider="google",
+                )
+            )
+
+            if existing_google_identity is not None:
+                # Same Mausam account already has a different
+                # Google subject attached. Do not silently
+                # replace it.
+                raise ValueError("Google account already linked")
+
+            identity = AuthIdentity(
+                user_id=user.id,
+                provider="google",
+                provider_subject=(google_identity.subject),
+            )
+
+            await self.auth_identity_repository.create(identity)
+
+            # Google has already verified ownership of the
+            # email address.
+            if user.email_verified_at is None:
+                user.email_verified_at = datetime.now(UTC)
+
+                await self.session.flush()
+
+            return user
+
+        # =====================================================
+        # Completely new Google user
+        # =====================================================
+
+        user = User(
+            name=google_identity.name,
+            email=google_identity.email,
+            password_hash=None,
+            is_active=True,
+            email_verified_at=datetime.now(UTC),
+            auth_version=1,
+        )
+
+        user = await self.repository.create(user)
+
+        identity = AuthIdentity(
+            user_id=user.id,
+            provider="google",
+            provider_subject=(google_identity.subject),
+        )
+
+        await self.auth_identity_repository.create(identity)
+
+        return user

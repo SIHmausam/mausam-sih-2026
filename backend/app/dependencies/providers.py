@@ -22,6 +22,9 @@ from app.integrations.alerts.sachet import (
 from app.integrations.email.base import EmailProvider
 from app.integrations.email.disabled import DisabledEmailProvider
 from app.integrations.email.smtp import SMTPEmailProvider
+from app.integrations.google_auth import (
+    GoogleTokenVerifier,
+)
 from app.integrations.personalization.base import (
     PersonalizationProvider,
 )
@@ -163,4 +166,18 @@ def get_email_provider() -> EmailProvider:
         from_email=settings.smtp_from_email,
         from_name=settings.smtp_from_name,
         use_tls=settings.smtp_use_tls,
+    )
+
+
+def get_google_token_verifier() -> GoogleTokenVerifier:
+    client_ids = [
+        settings.google_android_client_id,
+        settings.google_ios_client_id,
+        settings.google_web_client_id,
+    ]
+
+    return GoogleTokenVerifier(
+        allowed_client_ids=[
+            client_id for client_id in client_ids if client_id is not None
+        ]
     )
