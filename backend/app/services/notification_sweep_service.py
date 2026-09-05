@@ -52,6 +52,10 @@ class NotificationSweepService:
             routine_reminder_service or RoutineReminderService()
         )
 
+        self.routine_reminder_lead_minutes = (
+            self.routine_reminder_service.reminder_lead_minutes
+        )
+
         self.session = session
 
     async def evaluate_candidate(
@@ -111,6 +115,7 @@ class NotificationSweepService:
             await self.notification_evaluation_service.evaluate_routine_impacts(
                 user_id=candidate.user_id,
                 my_day=routine_reminder_my_day,
+                reminder_lead_minutes=(self.routine_reminder_lead_minutes),
             )
         )
 
