@@ -32,6 +32,9 @@ from app.services.notification_evaluation_service import (
 from app.services.notification_sweep_service import (
     NotificationSweepService,
 )
+from app.services.routine_reminder_service import (
+    RoutineReminderService,
+)
 from app.services.weather_context_service import (
     WeatherContextService,
 )
@@ -143,12 +146,17 @@ async def run_single_sweep() -> None:
             push_provider=(push_provider),
         )
 
+        routine_reminder_service = RoutineReminderService(
+            reminder_lead_minutes=(settings.notification_routine_reminder_lead_minutes)
+        )
+
         sweep_service = NotificationSweepService(
             session=session,
             weather_context_service=(weather_context_service),
-            alert_service=(alert_service),
-            my_day_service=(my_day_service),
+            alert_service=alert_service,
+            my_day_service=my_day_service,
             notification_evaluation_service=(notification_evaluation_service),
+            routine_reminder_service=(routine_reminder_service),
         )
 
         candidate_repository = NotificationCandidateRepository(session)
@@ -165,6 +173,7 @@ async def run_single_sweep() -> None:
             result = await sweep_service.run_sweep(
                 candidates=candidates,
                 target_date=(target_date),
+                current_time=started_at,
                 include_daily_summary=(include_daily_summary),
             )
 

@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,9 @@ from app.services.alert_service import AlertService
 from app.services.my_day_service import MyDayService
 from app.services.notification_evaluation_service import (
     NotificationEvaluationService,
+)
+from app.services.routine_reminder_service import (
+    RoutineReminderService,
 )
 from app.services.weather_context_service import (
     WeatherContextService,
@@ -34,6 +37,7 @@ class NotificationSweepService:
         alert_service: AlertService,
         my_day_service: MyDayService,
         notification_evaluation_service: NotificationEvaluationService,
+        routine_reminder_service: RoutineReminderService | None = None,
         session: AsyncSession | None = None,
     ):
         self.weather_context_service = weather_context_service
@@ -44,6 +48,10 @@ class NotificationSweepService:
 
         self.notification_evaluation_service = notification_evaluation_service
 
+        self.routine_reminder_service = (
+            routine_reminder_service or RoutineReminderService()
+        )
+
         self.session = session
 
     async def evaluate_candidate(
@@ -51,6 +59,7 @@ class NotificationSweepService:
         *,
         candidate: NotificationCandidate,
         target_date: date,
+        current_time: datetime,
         include_daily_summary: bool,
     ) -> int:
         context = await self.weather_context_service.get_context(
@@ -77,6 +86,17 @@ class NotificationSweepService:
             context_cache=environment_cache,
         )
 
+        approaching_routines = self.routine_reminder_service.get_approaching_routines(
+            my_day=my_day,
+            now=current_time,
+        )
+
+        routine_reminder_my_day = my_day.model_copy(
+            update={
+                "routines": approaching_routines,
+            }
+        )
+
         created_count = 0
 
         created_count += (
@@ -90,7 +110,7 @@ class NotificationSweepService:
         created_count += (
             await self.notification_evaluation_service.evaluate_routine_impacts(
                 user_id=candidate.user_id,
-                my_day=my_day,
+                my_day=routine_reminder_my_day,
             )
         )
 
@@ -119,6 +139,7 @@ class NotificationSweepService:
         *,
         candidates: list[NotificationCandidate],
         target_date: date,
+        current_time: datetime,
         include_daily_summary: bool,
     ) -> NotificationSweepResult:
         processed_users = 0
@@ -130,6 +151,7 @@ class NotificationSweepService:
                 created = await self.evaluate_candidate(
                     candidate=candidate,
                     target_date=target_date,
+                    current_time=current_time,
                     include_daily_summary=(include_daily_summary),
                 )
 
