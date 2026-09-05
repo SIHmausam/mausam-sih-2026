@@ -2,6 +2,8 @@ import pytest
 
 from app.schemas.air_quality import (
     CurrentAirQualityResponse,
+    HourlyAirQualityItem,
+    HourlyAirQualityResponse,
 )
 from app.schemas.weather import (
     AgricultureContextResponse,
@@ -116,6 +118,7 @@ class FakeWeatherService:
 class FakeAirQualityService:
     def __init__(self):
         self.current_calls = 0
+        self.hourly_calls = 0
 
     async def get_current(
         self,
@@ -138,6 +141,32 @@ class FakeAirQualityService:
             carbon_monoxide=180.2,
             ozone=75.6,
             uv_index=5.1,
+        )
+
+    async def get_hourly(
+        self,
+        latitude: float,
+        longitude: float,
+    ) -> HourlyAirQualityResponse:
+        self.hourly_calls += 1
+
+        return HourlyAirQualityResponse(
+            latitude=latitude,
+            longitude=longitude,
+            hourly=[
+                HourlyAirQualityItem(
+                    time="2026-08-31T13:00",
+                    us_aqi=96.0,
+                    european_aqi=52.0,
+                    pm2_5=27.0,
+                    pm10=43.0,
+                    nitrogen_dioxide=14.0,
+                    sulphur_dioxide=6.0,
+                    carbon_monoxide=190.0,
+                    ozone=79.0,
+                    uv_index=6.2,
+                )
+            ],
         )
 
 
@@ -177,6 +206,18 @@ async def test_weather_context_combines_environmental_data():
     assert response.air_quality.us_aqi == 82.0
     assert response.air_quality.european_aqi == 47.0
 
+    assert len(response.hourly_air_quality) == 1
+
+    hourly_air_quality = response.hourly_air_quality[0]
+
+    assert hourly_air_quality.us_aqi == 96.0
+    assert hourly_air_quality.european_aqi == 52.0
+
+    assert hourly_air_quality.pm2_5 == 27.0
+    assert hourly_air_quality.pm10 == 43.0
+
+    assert hourly_air_quality.uv_index == 6.2
+
     assert response.air_quality.pm2_5 == 22.1
     assert response.air_quality.pm10 == 39.4
 
@@ -193,3 +234,4 @@ async def test_weather_context_combines_environmental_data():
     assert weather_service.agriculture_calls == 1
 
     assert air_quality_service.current_calls == 1
+    assert air_quality_service.hourly_calls == 1

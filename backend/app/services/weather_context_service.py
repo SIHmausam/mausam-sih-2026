@@ -32,6 +32,7 @@ class WeatherContextService:
             daily,
             agriculture,
             air_quality,
+            hourly_air_quality,
         ) = await asyncio.gather(
             self.weather_service.get_hourly(
                 latitude,
@@ -49,6 +50,10 @@ class WeatherContextService:
                 latitude,
                 longitude,
             ),
+            self.air_quality_service.get_hourly(
+                latitude,
+                longitude,
+            ),
         )
 
         return WeatherContextResponse(
@@ -59,4 +64,5 @@ class WeatherContextService:
             daily=daily.daily,
             agriculture=agriculture,
             air_quality=air_quality,
+            hourly_air_quality=hourly_air_quality.hourly,
         )
