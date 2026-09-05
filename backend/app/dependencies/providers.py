@@ -170,14 +170,7 @@ def get_email_provider() -> EmailProvider:
 
 
 def get_google_token_verifier() -> GoogleTokenVerifier:
-    client_ids = [
-        settings.google_android_client_id,
-        settings.google_ios_client_id,
-        settings.google_web_client_id,
-    ]
+    if not settings.google_web_client_id:
+        raise RuntimeError("GOOGLE_WEB_CLIENT_ID is not configured")
 
-    return GoogleTokenVerifier(
-        allowed_client_ids=[
-            client_id for client_id in client_ids if client_id is not None
-        ]
-    )
+    return GoogleTokenVerifier(allowed_client_ids=[settings.google_web_client_id])
