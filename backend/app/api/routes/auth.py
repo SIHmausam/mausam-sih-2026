@@ -16,11 +16,16 @@ from app.core.redis import get_redis
 from app.dependencies.auth import get_current_user
 from app.dependencies.providers import (
     get_email_provider,
+    get_google_token_verifier,
 )
 from app.integrations.email.base import EmailProvider
+from app.integrations.google_auth import (
+    GoogleTokenVerifier,
+)
 from app.models.user import User
 from app.schemas.auth import (
     ForgotPasswordRequest,
+    GoogleLoginRequest,
     LoginRequest,
     LogoutRequest,
     MessageResponse,
@@ -447,4 +452,50 @@ async def resend_email_verification(
         message=(
             "If the account requires verification, a verification code has been sent."
         )
+    )
+
+
+@router.post(
+    "/google",
+    response_model=TokenResponse,
+)
+async def google_login(
+    payload: GoogleLoginRequest,
+    session: Annotated[
+        AsyncSession,
+        Depends(get_db_session),
+    ],
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
+    google_verifier: Annotated[
+        GoogleTokenVerifier,
+        Depends(get_google_token_verifier),
+    ],
+) -> TokenResponse:
+    service = AuthService(
+        session=session,
+        redis=redis,
+    )
+
+    try:
+        (
+            access_token,
+            refresh_token,
+        ) = await service.google_login(
+            id_token=payload.id_token,
+            verifier=google_verifier,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=(status.HTTP_401_UNAUTHORIZED),
+            detail=str(exc),
+        ) from exc
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
     )

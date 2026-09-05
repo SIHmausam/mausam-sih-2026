@@ -22,6 +22,9 @@ from app.integrations.alerts.sachet import (
 from app.integrations.email.base import EmailProvider
 from app.integrations.email.disabled import DisabledEmailProvider
 from app.integrations.email.smtp import SMTPEmailProvider
+from app.integrations.google_auth import (
+    GoogleTokenVerifier,
+)
 from app.integrations.personalization.base import (
     PersonalizationProvider,
 )
@@ -164,3 +167,10 @@ def get_email_provider() -> EmailProvider:
         from_name=settings.smtp_from_name,
         use_tls=settings.smtp_use_tls,
     )
+
+
+def get_google_token_verifier() -> GoogleTokenVerifier:
+    if not settings.google_web_client_id:
+        raise RuntimeError("GOOGLE_WEB_CLIENT_ID is not configured")
+
+    return GoogleTokenVerifier(allowed_client_ids=[settings.google_web_client_id])

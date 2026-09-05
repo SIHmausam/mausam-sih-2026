@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     password_reset_resend_cooldown_seconds: int = 60
     password_reset_max_attempts: int = 5
 
+    google_android_client_id: str | None = None
+    google_ios_client_id: str | None = None
+    google_web_client_id: str | None = None
+
     redis_url: str = "redis://localhost:6379/0"
 
     model_config = SettingsConfigDict(
