@@ -27,9 +27,9 @@ class User(Base):
         nullable=False,
     )
 
-    password_hash: Mapped[str] = mapped_column(
+    password_hash: Mapped[str | None] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -111,6 +111,12 @@ class User(Base):
 
     auth_sessions = relationship(
         "AuthSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    auth_identities = relationship(
+        "AuthIdentity",
         back_populates="user",
         cascade="all, delete-orphan",
     )

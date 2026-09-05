@@ -85,7 +85,7 @@ class AuthService:
         if user is None:
             raise ValueError("Invalid credentials")
 
-        if not verify_password(
+        if user.password_hash is None or not verify_password(
             password,
             user.password_hash,
         ):
