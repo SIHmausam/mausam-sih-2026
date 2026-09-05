@@ -72,5 +72,7 @@ class Settings(BaseSettings):
 
     notification_daily_summary_end_hour: int = 10
 
+    notification_routine_reminder_lead_minutes: int = 30
+
 
 settings = Settings()

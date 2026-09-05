@@ -291,7 +291,9 @@ async def test_caution_routine_creates_notification():
 
     assert kwargs["source"] == "my_day"
 
-    assert kwargs["source_reference"] == (f"routine:{routine.routine_id}:2026-09-02")
+    assert kwargs["source_reference"] == (
+        f"routine:{routine.routine_id}:2026-09-02:30m"
+    )
 
 
 @pytest.mark.asyncio
@@ -673,3 +675,65 @@ async def test_daily_summary_not_created_for_other_date():
     )
 
     assert created == 0
+
+
+@pytest.mark.asyncio
+async def test_duplicate_routine_reminder_is_not_created_twice():
+    service = NotificationEvaluationService(AsyncMock())
+
+    service.preference_repository.get_preference = AsyncMock(
+        return_value=FakePreference(routine_alerts_enabled=True)
+    )
+
+    service.notification_service.create_notification_once = AsyncMock(
+        side_effect=[
+            (
+                AsyncMock(),
+                True,
+            ),
+            (
+                AsyncMock(),
+                False,
+            ),
+        ]
+    )
+
+    routine = build_routine(impact=RoutineImpactLevel.CAUTION)
+
+    my_day = MyDayResponse(
+        date=date(2026, 9, 2),
+        routines=[routine],
+    )
+
+    user_id = uuid.uuid4()
+
+    first_created = await service.evaluate_routine_impacts(
+        user_id=user_id,
+        my_day=my_day,
+        reminder_lead_minutes=30,
+    )
+
+    second_created = await service.evaluate_routine_impacts(
+        user_id=user_id,
+        my_day=my_day,
+        reminder_lead_minutes=30,
+    )
+
+    assert first_created == 1
+    assert second_created == 0
+
+    assert service.notification_service.create_notification_once.await_count == 2
+
+    first_call = service.notification_service.create_notification_once.await_args_list[
+        0
+    ].kwargs
+
+    second_call = service.notification_service.create_notification_once.await_args_list[
+        1
+    ].kwargs
+
+    expected_reference = f"routine:{routine.routine_id}:2026-09-02:30m"
+
+    assert first_call["source_reference"] == expected_reference
+
+    assert second_call["source_reference"] == expected_reference

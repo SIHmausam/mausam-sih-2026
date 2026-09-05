@@ -183,6 +183,7 @@ class NotificationEvaluationService:
         *,
         user_id: uuid.UUID,
         my_day: MyDayResponse,
+        reminder_lead_minutes: int = 30,
     ) -> int:
         """
         Create notifications for CAUTION and AVOID
@@ -209,7 +210,11 @@ class NotificationEvaluationService:
             }:
                 continue
 
-            source_reference = f"routine:{routine.routine_id}:{my_day.date.isoformat()}"
+            source_reference = (
+                f"routine:{routine.routine_id}:"
+                f"{my_day.date.isoformat()}:"
+                f"{reminder_lead_minutes}m"
+            )
 
             location_id = routine.location.id if routine.location is not None else None
 
