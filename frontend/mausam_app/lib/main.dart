@@ -3322,6 +3322,8 @@ class _LoginScreenState extends State<LoginScreen> {
   );
   final AuthApiService _authApiService = AuthApiService();
   final TokenStorageService _tokenStorageService = TokenStorageService();
+  final PreferencesApiService _preferencesApiService =
+    PreferencesApiService();
 
   bool _isGoogleSigningIn = false;
   bool _isLoggingIn = false;
@@ -3342,6 +3344,32 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: const Color(0xFF263B52),
       ),
     );
+  }
+
+  Future<Widget> _destinationAfterLogin() async {
+    try {
+      final preferences =
+          await _preferencesApiService.getPreferences();
+
+      if (preferences.onboardingCompleted &&
+          preferences.persona != null) {
+        final persona = switch (preferences.persona) {
+          'farmer' => 'Farmer',
+          'traveller' => 'Traveler',
+          'health' => 'Fitness Enthusiast',
+          _ => 'Fitness Enthusiast',
+        };
+
+        return MainShell(
+          persona: persona,
+        );
+      }
+    } catch (_) {
+      // No completed preferences yet:
+      // continue with first-time onboarding.
+    }
+
+    return const PersonaSelectionScreen();
   }
 
   Future<void> _login() async {
@@ -3376,10 +3404,22 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      _showMessage('Mausam login successful.');
+      final destination =
+        await _destinationAfterLogin();
 
-      Navigator.of(context)
-          .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      'Mausam login successful.',
+    );
+
+    Navigator.of(context).pushReplacement(
+      _darkRoute(
+        page: destination,
+      ),
+    );
     } catch (error) {
       if (!mounted) {
         return;
@@ -3429,10 +3469,22 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      _showMessage('Mausam login successful.');
+      final destination =
+        await _destinationAfterLogin();
 
-      Navigator.of(context)
-          .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage(
+      'Mausam login successful.',
+    );
+
+    Navigator.of(context).pushReplacement(
+      _darkRoute(
+        page: destination,
+      ),
+    );
     } catch (error) {
       if (!mounted) {
         return;
