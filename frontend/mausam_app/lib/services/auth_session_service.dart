@@ -41,4 +41,20 @@ class AuthSessionService {
       return false;
     }
   }
+
+  Future<void> logout() async {
+    final refreshToken =
+        await _tokenStorageService.getRefreshToken();
+
+    try {
+      if (refreshToken != null &&
+          refreshToken.isNotEmpty) {
+        await _authApiService.logout(
+          refreshToken: refreshToken,
+        );
+      }
+    } finally {
+      await _tokenStorageService.clearTokens();
+    }
+  }
 }
