@@ -93,6 +93,9 @@ class WeatherContextResponse(BaseModel):
     latitude: float
     longitude: float
 
+    available: bool = True
+    message: str | None = None
+
     current: CurrentWeatherResponse
     hourly: list[HourlyWeatherItem]
     daily: list[DailyWeatherItem]
