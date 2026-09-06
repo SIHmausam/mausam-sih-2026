@@ -20,6 +20,7 @@ from app.integrations.alerts.sachet import (
     SachetAlertProvider,
 )
 from app.integrations.email.base import EmailProvider
+from app.integrations.email.brevo import BrevoEmailProvider
 from app.integrations.email.disabled import DisabledEmailProvider
 from app.integrations.email.smtp import SMTPEmailProvider
 from app.integrations.google_auth import (
@@ -155,17 +156,53 @@ def get_email_provider() -> EmailProvider:
     if not settings.email_delivery_enabled:
         return DisabledEmailProvider()
 
-    if not settings.smtp_host or not settings.smtp_from_email:
-        raise RuntimeError("SMTP configuration is incomplete")
+    provider = settings.email_provider.strip().lower()
 
-    return SMTPEmailProvider(
-        host=settings.smtp_host,
-        port=settings.smtp_port,
-        username=settings.smtp_username,
-        password=settings.smtp_password,
-        from_email=settings.smtp_from_email,
-        from_name=settings.smtp_from_name,
-        use_tls=settings.smtp_use_tls,
+    if provider == "brevo":
+        if not settings.brevo_api_key:
+            raise RuntimeError(
+                "BREVO_API_KEY is required "
+                "when EMAIL_PROVIDER=brevo"
+            )
+
+        if not settings.smtp_from_email:
+            raise RuntimeError(
+                "SMTP_FROM_EMAIL is required "
+                "when EMAIL_PROVIDER=brevo"
+            )
+
+        return BrevoEmailProvider(
+            api_key=settings.brevo_api_key,
+            api_url=settings.brevo_api_url,
+            from_email=settings.smtp_from_email,
+            from_name=settings.smtp_from_name,
+            timeout_seconds=(
+                settings.brevo_request_timeout_seconds
+            ),
+        )
+
+    if provider == "smtp":
+        if (
+            not settings.smtp_host
+            or not settings.smtp_from_email
+        ):
+            raise RuntimeError(
+                "SMTP configuration is incomplete"
+            )
+
+        return SMTPEmailProvider(
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            username=settings.smtp_username,
+            password=settings.smtp_password,
+            from_email=settings.smtp_from_email,
+            from_name=settings.smtp_from_name,
+            use_tls=settings.smtp_use_tls,
+        )
+
+    raise RuntimeError(
+        f"Unsupported EMAIL_PROVIDER: "
+        f"{settings.email_provider}"
     )
 
 
