@@ -48,6 +48,7 @@ class PriorityCard extends StatelessWidget {
               ),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   width: 46,
@@ -69,13 +70,21 @@ class PriorityCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.78),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.78),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 3),
@@ -104,15 +113,43 @@ class PriorityCard extends StatelessWidget {
                         ],
                       ),
 
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 10),
 
-                      Text(
-                        insight,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.65),
-                          fontSize: 11.5,
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.20),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome_rounded,
+                              color: Colors.white.withValues(alpha: 0.75),
+                              size: 15,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                insight,
+
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.72),
+                                  fontSize: 11.5,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -121,27 +158,35 @@ class PriorityCard extends StatelessWidget {
 
                 const SizedBox(width: 10),
 
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: indicatorColor,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: indicatorColor.withValues(alpha: 0.55),
-                        blurRadius: 7,
-                        spreadRadius: 1,
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: indicatorColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: indicatorColor.withValues(alpha: 0.55),
+                              blurRadius: 7,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 17),
+
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.white70,
+                        size: 22,
                       ),
                     ],
                   ),
-                ),
-
-                const SizedBox(width: 10),
-
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white70,
                 ),
               ],
             ),
