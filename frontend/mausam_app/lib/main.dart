@@ -1,20 +1,32 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'models/user_preferences.dart';
+import 'services/preferences_api_service.dart';
+
 import 'models/weather_data.dart';
+import 'models/user_profile.dart';
 import 'services/mock_weather_service.dart';
 import 'services/card_mapper.dart';
 import 'services/weather_code_mapper.dart';
-
-import 'widgets/priority_card.dart';
-import 'widgets/weather_effects.dart';
-
+import 'services/weather_api_service.dart';
+import 'services/location_search_service.dart';
+import 'services/user_api_service.dart';
 import 'config/app_config.dart';
 import 'services/google_auth_service.dart';
 import 'services/auth_api_service.dart';
 import 'services/token_storage_service.dart';
 import 'services/auth_session_service.dart';
+
+import 'screens/routines_screen.dart';
+
+import 'widgets/priority_card.dart';
+import 'widgets/weather_effects.dart';
+import 'widgets/severe_alert_poster.dart';
+import 'widgets/hourly_forecast.dart';
+import 'widgets/daily_forecast.dart';
 
 void main() {
   runApp(const MausamApp());
@@ -49,8 +61,8 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _cloudOne;
   late final Animation<double> _cloudTwo;
   late final Animation<double> _cloudThree;
-  final AuthSessionService _authSessionService =
-    AuthSessionService();
+  final AuthSessionService _authSessionService = AuthSessionService();
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
   @override
   void initState() {
@@ -90,39 +102,44 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _restoreSessionAndContinue() async {
-    // Keep the splash visible for a short minimum duration
-    // while session restoration happens.
     final results = await Future.wait([
       _authSessionService.restoreSession(),
-      Future<void>.delayed(
-        const Duration(milliseconds: 2500),
-      ),
+      Future<void>.delayed(const Duration(milliseconds: 2500)),
     ]);
 
-    if (!mounted) {
-      return;
-    }
+    final isAuthenticated = results[0] as bool;
 
-    final isAuthenticated = results.first as bool;
+    if (!mounted) return;
 
-    final Widget nextScreen;
+    Widget destination = const OnboardingScreen();
 
     if (isAuthenticated) {
-      // Temporary destination.
-      // Later we will load the user's saved persona/profile
-      // from the backend and go directly to MainShell.
-      nextScreen = const PersonaSelectionScreen();
-    } else {
-      nextScreen = const OnboardingScreen();
+      try {
+        final preferences = await _preferencesApiService.getPreferences();
+
+        if (preferences.onboardingCompleted && preferences.persona != null) {
+          final persona = switch (preferences.persona) {
+            'farmer' => 'Farmer',
+            'traveller' => 'Traveler',
+            'health' => 'Fitness Enthusiast',
+            _ => 'Fitness Enthusiast',
+          };
+
+          destination = MainShell(persona: persona);
+        }
+      } catch (_) {
+        // An authenticated user without completed preferences
+        // continues through onboarding.
+      }
     }
+
+    if (!mounted) return;
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => nextScreen,
-        transitionDuration:
-            const Duration(milliseconds: 700),
-        transitionsBuilder:
-            (_, animation, _, child) {
+        pageBuilder: (_, __, ___) => destination,
+        transitionDuration: const Duration(milliseconds: 700),
+        transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
             opacity: CurvedAnimation(
               parent: animation,
@@ -621,7 +638,7 @@ class GetStartedScreen extends StatelessWidget {
   const GetStartedScreen({super.key});
 
   void _continue(BuildContext context) {
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => const LoginScreen(),
         transitionDuration: const Duration(milliseconds: 500),
@@ -698,22 +715,29 @@ class GetStartedScreen extends StatelessWidget {
 
                   const Spacer(),
 
-                  SizedBox(
-                    width: double.infinity,
-                    child: _OnboardingNextButton(
-                      label: 'Continue',
-                      onPressed: () => _continue(context),
-                    ),
-                  ),
+                  Transform.translate(
+                    offset: const Offset(0, -36),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: _OnboardingNextButton(
+                            label: 'Continue',
+                            onPressed: () => _continue(context),
+                          ),
+                        ),
 
-                  const SizedBox(height: 12),
+                        const SizedBox(height: 12),
 
-                  Text(
-                    'You can change your preferences anytime.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.42),
-                      fontSize: 12,
+                        Text(
+                          'You can change your preferences anytime.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.42),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -834,11 +858,11 @@ class _PersonaSelectionScreenState extends State<PersonaSelectionScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 8),
 
                   SizedBox(
                     width: double.infinity,
-                    height: 56,
+                    height: 60,
                     child: ElevatedButton(
                       onPressed: _continue,
                       style: ElevatedButton.styleFrom(
@@ -996,6 +1020,8 @@ class LocationSetupScreen extends StatefulWidget {
 
 class _LocationSetupScreenState extends State<LocationSetupScreen> {
   final _locationController = TextEditingController(text: 'Ghaziabad');
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
+  bool _isCompletingOnboarding = false;
 
   @override
   void dispose() {
@@ -1012,11 +1038,81 @@ class _LocationSetupScreenState extends State<LocationSetupScreen> {
     );
   }
 
-  void _continue() {
-    Navigator.of(context).pushAndRemoveUntil(
-      _darkRoute(page: MainShell(persona: widget.persona)),
-      (route) => false,
-    );
+  Future<void> _continue() async {
+    if (_isCompletingOnboarding) return;
+
+    String backendPersona;
+    List<String> interests;
+    List<String> activityContexts;
+
+    switch (widget.persona) {
+      case 'Farmer':
+        backendPersona = 'farmer';
+        interests = ['rainfall', 'soil_moisture', 'humidity'];
+        activityContexts = ['farming'];
+        break;
+      case 'Traveler':
+        backendPersona = 'traveller';
+        interests = ['rainfall', 'visibility', 'temperature'];
+        activityContexts = ['travel'];
+        break;
+      case 'Fitness Enthusiast':
+      default:
+        backendPersona = 'health';
+        interests = ['aqi', 'uv', 'temperature'];
+        activityContexts = ['outdoor_health'];
+        break;
+    }
+
+    setState(() {
+      _isCompletingOnboarding = true;
+    });
+
+    try {
+      await _preferencesApiService.completeOnboarding(
+        preferredLanguage: 'en',
+        temperatureUnit: 'celsius',
+        persona: backendPersona,
+        interests: interests,
+        preferredStartHour: null,
+        preferredEndHour: null,
+        activityContexts: activityContexts,
+        notifications: {
+          'official_alerts': true,
+          'routine_alerts': true,
+          'rain_alerts': true,
+          'aqi_alerts': true,
+          'daily_summary': true,
+        },
+        personalization: {
+          'personalized_homepage': true,
+          'routine_impact': true,
+          'learn_from_activity': true,
+        },
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushAndRemoveUntil(
+        _darkRoute(page: MainShell(persona: widget.persona)),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not finish setup: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCompletingOnboarding = false;
+        });
+      }
+    }
   }
 
   @override
@@ -1214,7 +1310,7 @@ class _LocationSetupScreenState extends State<LocationSetupScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _continue,
+                      onPressed: _isCompletingOnboarding ? null : _continue,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: const Color(0xFF182535),
@@ -1223,13 +1319,21 @@ class _LocationSetupScreenState extends State<LocationSetupScreen> {
                           borderRadius: BorderRadius.circular(18),
                         ),
                       ),
-                      child: const Text(
-                        'Continue to Mausam',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      child: _isCompletingOnboarding
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                              ),
+                            )
+                          : const Text(
+                              'Continue to Mausam',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                     ),
                   ),
 
@@ -3213,17 +3317,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final GoogleAuthService _googleAuthService =
-      GoogleAuthService(
+  final GoogleAuthService _googleAuthService = GoogleAuthService(
     serverClientId: AppConfig.googleServerClientId,
   );
-  final AuthApiService _authApiService =
-    AuthApiService();
-  final TokenStorageService _tokenStorageService =
-    TokenStorageService();
+  final AuthApiService _authApiService = AuthApiService();
+  final TokenStorageService _tokenStorageService = TokenStorageService();
 
   bool _isGoogleSigningIn = false;
-
+  bool _isLoggingIn = false;
   bool _obscurePassword = true;
 
   @override
@@ -3243,9 +3344,55 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _login() {
-    Navigator.of(context)
-        .push(_darkRoute(page: const PersonaSelectionScreen()));
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage('Please enter your email and password.');
+      return;
+    }
+
+    if (_isLoggingIn) {
+      return;
+    }
+
+    setState(() {
+      _isLoggingIn = true;
+    });
+
+    try {
+      final tokens = await _authApiService.login(
+        email: email,
+        password: password,
+      );
+
+      await _tokenStorageService.saveTokens(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('Mausam login successful.');
+
+      Navigator.of(context)
+          .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('Login failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoggingIn = false;
+        });
+      }
+    }
   }
 
   void _openSignUp() {
@@ -3254,9 +3401,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleGoogleSignIn() async {
     if (AppConfig.googleServerClientId.isEmpty) {
-      _showMessage(
-        'Google Server Client ID is not configured.',
-      );
+      _showMessage('Google Server Client ID is not configured.');
       return;
     }
 
@@ -3269,12 +3414,9 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final googleIdToken =
-          await _googleAuthService
-              .signInAndGetIdToken();
+      final googleIdToken = await _googleAuthService.signInAndGetIdToken();
 
-      final tokens =
-          await _authApiService.loginWithGoogle(
+      final tokens = await _authApiService.loginWithGoogle(
         idToken: googleIdToken,
       );
 
@@ -3287,23 +3429,16 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      _showMessage(
-        'Mausam login successful.',
-      );
+      _showMessage('Mausam login successful.');
 
-      Navigator.of(context).pushReplacement(
-        _darkRoute(
-          page: const PersonaSelectionScreen(),
-        ),
-      );
+      Navigator.of(context)
+          .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      _showMessage(
-        'Login failed: $error',
-      );
+      _showMessage('Login failed: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -3459,10 +3594,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   _AuthSecondaryButton(
                     label: 'Continue with Google',
                     icon: Icons.g_mobiledata_rounded,
-                    onPressed:
-                        _isGoogleSigningIn
-                            ? null
-                            : _handleGoogleSignIn,
+                    onPressed: () => _handleGoogleSignIn(),
                   ),
 
                   const SizedBox(height: 28),
@@ -3800,7 +3932,7 @@ class _AuthPrimaryButton extends StatelessWidget {
 class _AuthSecondaryButton extends StatelessWidget {
   final String label;
   final IconData icon;
-  final VoidCallback? onPressed;
+  final VoidCallback onPressed;
 
   const _AuthSecondaryButton({
     required this.label,
@@ -3861,10 +3993,23 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+  late String _activePersona;
+
+  @override
+  void initState() {
+    super.initState();
+    _activePersona = widget.persona;
+  }
 
   void _selectPage(int index) {
     setState(() {
       _currentIndex = index;
+    });
+  }
+
+  void _updatePersona(String persona) {
+    setState(() {
+      _activePersona = persona;
     });
   }
 
@@ -3884,7 +4029,10 @@ class _MainShellState extends State<MainShell> {
           },
           onSettings: () {
             Navigator.pop(context);
-            Navigator.push(context, _darkRoute(page: const SettingsPage()));
+            Navigator.push(
+              context,
+              _darkRoute(page: SettingsPage(onPersonaChanged: _updatePersona)),
+            );
           },
         );
       },
@@ -3906,44 +4054,23 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _currentPage() {
-    switch (_currentIndex) {
-      case 0:
-        return HomeScreen(
-          showBottomNav: false,
-          onMenuTap: _openMenu,
-          persona: widget.persona,
-        );
-
-      case 1:
-        return const _SimplePage(
-          title: 'My Day',
-          icon: Icons.calendar_today_rounded,
-          message: 'Your personalized daily plan will appear here.',
-        );
-
-      case 2:
-        return const MapComingSoonPage();
-
-      case 3:
-        return const ProfilePage();
-
-      default:
-        return const _SimplePage(
-          title: 'Mausam',
-          icon: Icons.cloud_outlined,
-          message: 'Welcome to Mausam.',
-        );
-    }
-  }
+  List<Widget> get _pages => [
+    HomeScreen(
+      showBottomNav: false,
+      onMenuTap: _openMenu,
+      persona: _activePersona,
+    ),
+    const RoutinesScreen(),
+    const MapComingSoonPage(),
+    ProfilePage(persona: _activePersona, onPersonaChanged: _updatePersona),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          _currentPage(),
-
+          IndexedStack(index: _currentIndex, children: _pages),
           Positioned(
             left: 18,
             right: 18,
@@ -3954,1191 +4081,6 @@ class _MainShellState extends State<MainShell> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FunctionalNavBar extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onSelected;
-
-  const _FunctionalNavBar({
-    required this.currentIndex,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          height: 70,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.40),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
-          ),
-          child: Row(
-            children: [
-              _FunctionalNavItem(
-                icon: Icons.home_rounded,
-                label: 'Home',
-                active: currentIndex == 0,
-                onTap: () => onSelected(0),
-              ),
-              _FunctionalNavItem(
-                icon: Icons.calendar_today_rounded,
-                label: 'My Day',
-                active: currentIndex == 1,
-                onTap: () => onSelected(1),
-              ),
-              _FunctionalNavItem(
-                icon: Icons.map_outlined,
-                label: 'Map',
-                active: currentIndex == 2,
-                onTap: () => onSelected(2),
-              ),
-              _FunctionalNavItem(
-                icon: Icons.person_outline_rounded,
-                label: 'Profile',
-                active: currentIndex == 3,
-                onTap: () => onSelected(3),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FunctionalNavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _FunctionalNavItem({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final iconColor = active
-        ? Colors.white
-        : Colors.white.withValues(alpha: 0.55);
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: iconColor, size: 23),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                color: iconColor,
-                fontSize: 10,
-                fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 3),
-            if (active)
-              Container(
-                width: 5,
-                height: 5,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        const _OnboardingBackground(),
-        SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 30, 20, 120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _PageHeader(
-                  title: 'Profile',
-                  subtitle: 'Your Mausam personalization profile',
-                  icon: Icons.person_outline_rounded,
-                ),
-                const SizedBox(height: 28),
-
-                GlassContainer(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.fitness_center_rounded,
-                          color: Colors.white,
-                          size: 29,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Fitness',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 21,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            SizedBox(height: 5),
-                            Text(
-                              'Your weather insights are personalized for an active lifestyle.',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                const _ProfileSectionTitle(title: 'PERSONALIZATION'),
-
-                GlassContainer(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Column(
-                    children: [
-                      const _ProfileInfoRow(
-                        icon: Icons.psychology_outlined,
-                        title: 'Personalization',
-                        value: 'Active',
-                      ),
-                      Divider(
-                        height: 1,
-                        indent: 52,
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                      const _ProfileInfoRow(
-                        icon: Icons.location_on_outlined,
-                        title: 'Location',
-                        value: 'Ghaziabad, UP',
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                const _ProfileSectionTitle(title: 'PERSONA'),
-
-                GlassContainer(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      const _PersonaOption(
-                        icon: Icons.fitness_center_rounded,
-                        title: 'Fitness',
-                        subtitle:
-                            'Health, UV, air quality and outdoor conditions.',
-                        selected: true,
-                      ),
-                      const SizedBox(height: 10),
-                      const _PersonaOption(
-                        icon: Icons.agriculture_outlined,
-                        title: 'Farmer',
-                        subtitle: 'Weather conditions relevant to agricultural activity.',
-                      ),
-                      const SizedBox(height: 10),
-                      const _PersonaOption(
-                        icon: Icons.luggage_outlined,
-                        title: 'Traveler',
-                        subtitle: 'Travel-friendly weather and environmental information.',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _PageBackground extends StatelessWidget {
-  final Widget child;
-
-  const _PageBackground({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF263B52), Color(0xFF3D5870), Color(0xFF667D90)],
-        ),
-      ),
-      child: child,
-    );
-  }
-}
-
-class _PageHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-
-  const _PageHeader({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-          ),
-          child: Icon(icon, color: Colors.white, size: 25),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 25,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProfileSectionTitle extends StatelessWidget {
-  final String title;
-
-  const _ProfileSectionTitle({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 9),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.1,
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileInfoRow extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-
-  const _ProfileInfoRow({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
-      child: Row(
-        children: [
-          const SizedBox(width: 14),
-          Icon(icon, color: Colors.white70, size: 21),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
-          ),
-          const SizedBox(width: 14),
-        ],
-      ),
-    );
-  }
-}
-
-class _PersonaOption extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool selected;
-
-  const _PersonaOption({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.selected = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: selected
-            ? Colors.white.withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.055),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: selected
-              ? Colors.white.withValues(alpha: 0.28)
-              : Colors.white.withValues(alpha: 0.08),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.10),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white, size: 21),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (selected) ...[
-                      const SizedBox(width: 7),
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
-
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  String persona = 'Fitness';
-  String interests = 'Outdoor Run, Air Quality';
-  String location = 'Ghaziabad, UP';
-  String weatherAlerts = 'Severe Only';
-  String temperatureUnit = 'Celsius (°C)';
-  String windSpeed = 'km/h';
-  String language = 'English';
-
-  bool personalizeHomepage = true;
-  bool improveRecommendations = true;
-  bool dailyBriefing = true;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        const _OnboardingBackground(),
-        Material(
-          type: MaterialType.transparency,
-          child: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 40),
-              children: [
-                Row(
-                  children: [
-                    GlassButton(
-                      icon: Icons.arrow_back_ios_new_rounded,
-                      onTap: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 14),
-                    const Text(
-                      'Settings',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 28),
-
-                const _SettingsGlassSectionTitle(
-                  title: 'PERSONA & PREFERENCES',
-                ),
-                GlassContainer(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Column(
-                    children: [
-                      _GlassActionRow(
-                        title: 'Change persona',
-                        value: persona,
-                        onTap: _changePersona,
-                      ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'Edit interests',
-                        value: interests,
-                        onTap: _editInterests,
-                      ),
-                      const _GlassDivider(),
-                      _GlassSwitchRow(
-                        title: 'Personalize homepage',
-                        value: personalizeHomepage,
-                        onChanged: (value) {
-                          setState(() => personalizeHomepage = value);
-                        },
-                      ),
-                      const _GlassDivider(),
-                      _GlassSwitchRow(
-                        title: 'Improve recommendations',
-                        value: improveRecommendations,
-                        onChanged: (value) {
-                          setState(() => improveRecommendations = value);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                const _SettingsGlassSectionTitle(title: 'LOCATION'),
-                GlassContainer(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Column(
-                    children: [
-                      _GlassActionRow(
-                        title: 'Primary Location',
-                        value: location,
-                        onTap: _changeLocation,
-                      ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'Manage Saved Locations',
-                        value: '3 Saved',
-                        onTap: _manageLocations,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                const _SettingsGlassSectionTitle(title: 'NOTIFICATIONS'),
-                GlassContainer(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Column(
-                    children: [
-                      _GlassActionRow(
-                        title: 'Weather Alerts',
-                        value: weatherAlerts,
-                        onTap: _weatherAlertSettings,
-                      ),
-                      const _GlassDivider(),
-                      _GlassSwitchRow(
-                        title: 'Daily Briefing',
-                        value: dailyBriefing,
-                        onChanged: (value) {
-                          setState(() => dailyBriefing = value);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                const _SettingsGlassSectionTitle(title: 'UNITS & LANGUAGE'),
-                GlassContainer(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Column(
-                    children: [
-                      _GlassActionRow(
-                        title: 'Temperature Unit',
-                        value: temperatureUnit,
-                        onTap: _changeTemperatureUnit,
-                      ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'Wind Speed',
-                        value: windSpeed,
-                        onTap: _changeWindSpeed,
-                      ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'App Language',
-                        value: language,
-                        onTap: _changeLanguage,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                const _SettingsGlassSectionTitle(title: 'ABOUT'),
-                GlassContainer(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Column(
-                    children: [
-                      const _GlassInfoRow(
-                        title: 'App Version',
-                        value: 'SIH 2026 Prototype',
-                      ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'Terms of Service',
-                        onTap: () => _showInfo(
-                          'Terms of Service',
-                          'Terms and conditions for the Mausam personalized weather experience.',
-                        ),
-                      ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'Privacy Policy',
-                        onTap: () => _showInfo(
-                          'Privacy Policy',
-                          'Your preferences are used to improve your personalized Mausam experience.',
-                        ),
-                      ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'IMD Attribution',
-                        onTap: () => _showInfo(
-                          'IMD Attribution',
-                          'Weather information is presented using data associated with the India Meteorological Department.',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 28),
-
-                SizedBox(
-                  height: 50,
-                  child: OutlinedButton(
-                    onPressed: _signOut,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.22),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      backgroundColor: Colors.white.withValues(alpha: 0.06),
-                    ),
-                    child: const Text(
-                      'Sign Out',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _changePersona() {
-    _showChoiceSheet(
-      title: 'Change persona',
-      options: const ['Fitness', 'Farmer', 'Traveler'],
-      selected: persona,
-      onSelected: (value) => setState(() => persona = value),
-    );
-  }
-
-  void _editInterests() {
-    _showChoiceSheet(
-      title: 'Edit interests',
-      options: const [
-        'Outdoor Run, Air Quality',
-        'Outdoor Activities',
-        'Air Quality',
-        'Fitness & Health',
-        'Travel',
-      ],
-      selected: interests,
-      onSelected: (value) => setState(() => interests = value),
-    );
-  }
-
-  void _changeLocation() {
-    _showChoiceSheet(
-      title: 'Primary Location',
-      options: const ['Ghaziabad, UP', 'Delhi', 'Noida', 'Lucknow'],
-      selected: location,
-      onSelected: (value) => setState(() => location = value),
-    );
-  }
-
-  void _manageLocations() {
-    _showChoiceSheet(
-      title: 'Saved Locations',
-      options: const ['Ghaziabad, UP', 'Delhi', 'Noida'],
-      selected: location,
-      onSelected: (value) => setState(() => location = value),
-    );
-  }
-
-  void _weatherAlertSettings() {
-    _showChoiceSheet(
-      title: 'Weather Alerts',
-      options: const ['Severe Only', 'All Alerts', 'None'],
-      selected: weatherAlerts,
-      onSelected: (value) => setState(() => weatherAlerts = value),
-    );
-  }
-
-  void _changeTemperatureUnit() {
-    _showChoiceSheet(
-      title: 'Temperature Unit',
-      options: const ['Celsius (°C)', 'Fahrenheit (°F)'],
-      selected: temperatureUnit,
-      onSelected: (value) => setState(() => temperatureUnit = value),
-    );
-  }
-
-  void _changeWindSpeed() {
-    _showChoiceSheet(
-      title: 'Wind Speed',
-      options: const ['km/h', 'm/s', 'mph'],
-      selected: windSpeed,
-      onSelected: (value) => setState(() => windSpeed = value),
-    );
-  }
-
-  void _changeLanguage() {
-    _showChoiceSheet(
-      title: 'App Language',
-      options: const ['English', 'Hindi'],
-      selected: language,
-      onSelected: (value) => setState(() => language = value),
-    );
-  }
-
-  void _showChoiceSheet({
-    required String title,
-    required List<String> options,
-    required String selected,
-    required ValueChanged<String> onSelected,
-  }) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF263B52),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ...options.map(
-                  (option) => ListTile(
-                    title: Text(
-                      option,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    trailing: option == selected
-                        ? const Icon(Icons.check_circle, color: Colors.white)
-                        : const Icon(
-                            Icons.chevron_right,
-                            color: Colors.white54,
-                          ),
-                    onTap: () {
-                      onSelected(option);
-                      Navigator.pop(context);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showInfo(String title, String message) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF263B52),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        content: Text(message, style: const TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _signOut() {
-    _showInfo(
-      'Sign Out',
-      'Authentication will be connected during the onboarding and login flow.',
-    );
-  }
-}
-
-class _SettingsGlassSectionTitle extends StatelessWidget {
-  final String title;
-
-  const _SettingsGlassSectionTitle({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 9),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.1,
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassDivider extends StatelessWidget {
-  const _GlassDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      height: 1,
-      indent: 52,
-      color: Colors.white.withValues(alpha: 0.08),
-    );
-  }
-}
-
-class _GlassActionRow extends StatelessWidget {
-  final String title;
-  final String? value;
-  final VoidCallback onTap;
-
-  const _GlassActionRow({required this.title, this.value, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        height: 54,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                ),
-              ),
-              if (value != null)
-                Flexible(
-                  child: Text(
-                    value!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(color: Colors.white60, fontSize: 12),
-                  ),
-                ),
-              const SizedBox(width: 7),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.white54,
-                size: 19,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassSwitchRow extends StatelessWidget {
-  final String title;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _GlassSwitchRow({
-    required this.title,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 54,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-            Switch(
-              value: value,
-              onChanged: onChanged,
-              activeThumbColor: Colors.white,
-              activeTrackColor: Colors.white24,
-              inactiveThumbColor: Colors.white54,
-              inactiveTrackColor: Colors.white12,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassInfoRow extends StatelessWidget {
-  final String title;
-  final String value;
-
-  const _GlassInfoRow({required this.title, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 54,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class MapComingSoonPage extends StatelessWidget {
-  const MapComingSoonPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF101C2C),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const _OnboardingBackground(),
-          SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 118,
-                      height: 118,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.075),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.12),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            blurRadius: 30,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.map_rounded,
-                        size: 58,
-                        color: Colors.white.withValues(alpha: 0.86),
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    const Text(
-                      'Weather Map',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    Text(
-                      'Explore weather conditions across India, '
-                      'all in one place.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.66),
-                        fontSize: 15,
-                        height: 1.5,
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.12),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.auto_awesome_rounded,
-                            size: 17,
-                            color: Colors.white.withValues(alpha: 0.82),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Coming soon',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    Text(
-                      'Interactive weather maps and live weather layers '
-                      'will be available here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.48),
-                        fontSize: 13,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SimplePage extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final String message;
-
-  const _SimplePage({
-    required this.title,
-    required this.icon,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF101C2C), Color(0xFF30465A), Color(0xFF687D8D)],
-        ),
-      ),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: Colors.white, size: 52),
-                const SizedBox(height: 24),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.70),
-                    fontSize: 15,
-                    height: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -5273,7 +4215,7 @@ class _SideMenu extends StatelessWidget {
 
                   _SideMenuItem(
                     icon: Icons.calendar_today_rounded,
-                    title: 'My Day',
+                    title: 'Smart Routine',
                     selected: currentIndex == 1,
                     onTap: () => onSelect(1),
                   ),
@@ -5293,6 +4235,73 @@ class _SideMenu extends StatelessWidget {
                   ),
 
                   const Spacer(),
+
+                  // Account card
+                  GestureDetector(
+                    onTap: () => onSelect(3),
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.065),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.09),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.09),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.person_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 11),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Mausam User',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  'Sign in to view account',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Colors.white38,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
 
                   // Persona card
                   Container(
@@ -5443,6 +4452,85 @@ class _SideMenuItem extends StatelessWidget {
   }
 }
 
+class _WeatherBackground extends StatelessWidget {
+  final WeatherData weather;
+
+  const _WeatherBackground({required this.weather});
+
+  @override
+  Widget build(BuildContext context) {
+    final code = weather.weatherCode;
+    final isNight = !weather.isDaylight;
+
+    final Color top;
+    final Color bottom;
+
+    if (code >= 95) {
+      // Thunderstorm
+      top = const Color(0xFF17243A);
+      bottom = const Color(0xFF26364D);
+    } else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) {
+      // Rain
+      top = const Color(0xFF24364A);
+      bottom = const Color(0xFF3A5068);
+    } else if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) {
+      // Snow
+      top = const Color(0xFF52677A);
+      bottom = const Color(0xFF8296A6);
+    } else if (code == 45 || code == 48) {
+      // Fog
+      top = const Color(0xFF52616D);
+      bottom = const Color(0xFF788892);
+    } else if (code == 2 || code == 3) {
+      // Cloudy
+      top = const Color(0xFF33485C);
+      bottom = const Color(0xFF53697A);
+    } else if (isNight) {
+      // Clear / mostly-clear night.
+      top = const Color(0xFF071426);
+      bottom = const Color(0xFF172A42);
+    } else {
+      // Clear / mostly-clear day.
+      top = const Color(0xFF287A9A);
+      bottom = const Color(0xFF69B4C7);
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [top, bottom],
+            ),
+          ),
+        ),
+
+        WeatherEffects(
+          weatherCode: weather.weatherCode,
+          isDaylight: weather.isDaylight,
+        ),
+      ],
+    );
+  }
+}
+
+class SelectedLocation {
+  final String name;
+  final String displayName;
+  final double latitude;
+  final double longitude;
+
+  const SelectedLocation({
+    required this.name,
+    required this.displayName,
+    required this.latitude,
+    required this.longitude,
+  });
+}
+
 class HomeScreen extends StatefulWidget {
   final bool showBottomNav;
   final VoidCallback? onMenuTap;
@@ -5459,23 +4547,235 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   String _selectedLocation = 'Ghaziabad, UP';
+  late SelectedLocation _selectedLocationData;
+
+  Future<WeatherData>? _weatherFuture;
+  bool _isRefreshing = false;
+  int _refreshVersion = 0;
+
+  final Set<String> _knownAlertKeys = {};
+  final Set<String> _unreadAlertKeys = {};
+
+  late final AnimationController _refreshAnimationController;
+
+  static const Map<String, SelectedLocation> _defaultLocations = {
+    'Ghaziabad, UP': SelectedLocation(
+      name: 'Ghaziabad',
+      displayName: 'Ghaziabad, UP',
+      latitude: 28.646748,
+      longitude: 77.48004,
+    ),
+    'Delhi, Delhi': SelectedLocation(
+      name: 'Delhi',
+      displayName: 'Delhi, Delhi',
+      latitude: 28.6139,
+      longitude: 77.2090,
+    ),
+    'Noida, UP': SelectedLocation(
+      name: 'Noida',
+      displayName: 'Noida, UP',
+      latitude: 28.5355,
+      longitude: 77.3910,
+    ),
+    'Lucknow, UP': SelectedLocation(
+      name: 'Lucknow',
+      displayName: 'Lucknow, UP',
+      latitude: 26.8467,
+      longitude: 80.9462,
+    ),
+    'Kanpur, UP': SelectedLocation(
+      name: 'Kanpur',
+      displayName: 'Kanpur, UP',
+      latitude: 26.4499,
+      longitude: 80.3319,
+    ),
+    'Agra, UP': SelectedLocation(
+      name: 'Agra',
+      displayName: 'Agra, UP',
+      latitude: 27.1767,
+      longitude: 78.0081,
+    ),
+    'Jaipur, Rajasthan': SelectedLocation(
+      name: 'Jaipur',
+      displayName: 'Jaipur, Rajasthan',
+      latitude: 26.9124,
+      longitude: 75.7873,
+    ),
+    'Mumbai, Maharashtra': SelectedLocation(
+      name: 'Mumbai',
+      displayName: 'Mumbai, Maharashtra',
+      latitude: 19.0760,
+      longitude: 72.8777,
+    ),
+    'Pune, Maharashtra': SelectedLocation(
+      name: 'Pune',
+      displayName: 'Pune, Maharashtra',
+      latitude: 18.5204,
+      longitude: 73.8567,
+    ),
+    'Bengaluru, Karnataka': SelectedLocation(
+      name: 'Bengaluru',
+      displayName: 'Bengaluru, Karnataka',
+      latitude: 12.9716,
+      longitude: 77.5946,
+    ),
+    'Hyderabad, Telangana': SelectedLocation(
+      name: 'Hyderabad',
+      displayName: 'Hyderabad, Telangana',
+      latitude: 17.3850,
+      longitude: 78.4867,
+    ),
+    'Chennai, Tamil Nadu': SelectedLocation(
+      name: 'Chennai',
+      displayName: 'Chennai, Tamil Nadu',
+      latitude: 13.0827,
+      longitude: 80.2707,
+    ),
+    'Kolkata, West Bengal': SelectedLocation(
+      name: 'Kolkata',
+      displayName: 'Kolkata, West Bengal',
+      latitude: 22.5726,
+      longitude: 88.3639,
+    ),
+    'Ahmedabad, Gujarat': SelectedLocation(
+      name: 'Ahmedabad',
+      displayName: 'Ahmedabad, Gujarat',
+      latitude: 23.0225,
+      longitude: 72.5714,
+    ),
+    'Chandigarh, Chandigarh': SelectedLocation(
+      name: 'Chandigarh',
+      displayName: 'Chandigarh, Chandigarh',
+      latitude: 30.7333,
+      longitude: 76.7794,
+    ),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+
+    _selectedLocationData = _defaultLocations[_selectedLocation]!;
+
+    _refreshAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+      value: 1.0,
+    );
+
+    _loadWeather();
+  }
+
+  @override
+  void dispose() {
+    _refreshAnimationController.dispose();
+    super.dispose();
+  }
+
+  String _alertKey(WeatherAlert alert) {
+    return [
+      alert.severity,
+      alert.title,
+      alert.message,
+      alert.location,
+    ].join('|');
+  }
+
+  void _registerAlerts(WeatherData weather) {
+    final alerts = buildWeatherAlerts(weather);
+    final currentKeys = alerts.map(_alertKey).toSet();
+
+    final newKeys = currentKeys.difference(_knownAlertKeys);
+
+    _knownAlertKeys.removeWhere((key) => !currentKeys.contains(key));
+
+    _unreadAlertKeys.removeWhere((key) => !currentKeys.contains(key));
+
+    if (newKeys.isEmpty) {
+      return;
+    }
+
+    _knownAlertKeys.addAll(newKeys);
+    _unreadAlertKeys.addAll(newKeys);
+  }
+
+  void _loadWeather() {
+    _weatherFuture =
+        WeatherApiService.getWeather(
+          latitude: _selectedLocationData.latitude,
+          longitude: _selectedLocationData.longitude,
+          city: _selectedLocation,
+        ).then((weather) {
+          if (mounted) {
+            setState(() {
+              _registerAlerts(weather);
+            });
+          }
+
+          return weather;
+        });
+  }
+
+  Future<void> _refreshWeather() async {
+    if (_isRefreshing) return;
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      final freshWeather = await WeatherApiService.getWeather(
+        latitude: _selectedLocationData.latitude,
+        longitude: _selectedLocationData.longitude,
+        city: _selectedLocation,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _registerAlerts(freshWeather);
+        _weatherFuture = Future.value(freshWeather);
+        _refreshVersion++;
+        _isRefreshing = false;
+      });
+
+      _refreshAnimationController.forward(from: 0);
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _isRefreshing = false;
+      });
+    }
+  }
 
   void _openNotifications(WeatherData weather) {
+    final alerts = buildWeatherAlerts(weather);
+    final currentKeys = alerts.map(_alertKey).toSet();
+
+    setState(() {
+      _unreadAlertKeys.removeAll(currentKeys);
+    });
+
     Navigator.of(context)
         .push(_darkRoute(page: NotificationsScreen(weather: weather)));
   }
 
   Future<void> _changeLocation() async {
-    final result = await Navigator.of(context).push<String>(
-      PageRouteBuilder<String>(
+    final result = await Navigator.of(context).push<SelectedLocation>(
+      PageRouteBuilder<SelectedLocation>(
         opaque: true,
         barrierColor: const Color(0xFF101C2C),
         transitionDuration: const Duration(milliseconds: 450),
         reverseTransitionDuration: const Duration(milliseconds: 350),
         pageBuilder: (context, animation, secondaryAnimation) {
-          return LocationSearchScreen(currentLocation: _selectedLocation);
+          return LocationSearchScreen(
+            currentLocation: _selectedLocation,
+            defaultLocations: _defaultLocations,
+          );
         },
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curvedAnimation = CurvedAnimation(
@@ -5497,204 +4797,386 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    if (result != null && result.isNotEmpty && mounted) {
+    if (result != null && mounted) {
       setState(() {
-        _selectedLocation = result;
+        _selectedLocation = result.displayName;
+        _selectedLocationData = result;
+        _loadWeather();
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final WeatherData baseWeather = MockWeatherService.getWeather();
+    return FutureBuilder<WeatherData>(
+      key: ValueKey(_refreshVersion),
+      future: _weatherFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _WeatherLoadingView();
+        }
 
-    final WeatherData weather = WeatherData(
-      city: _selectedLocation,
-      timestamp: baseWeather.timestamp,
-      temperature: baseWeather.temperature,
-      humidity: baseWeather.humidity,
-      apparentTemperature: baseWeather.apparentTemperature,
-      precipitation: baseWeather.precipitation,
-      rain: baseWeather.rain,
-      weatherCode: baseWeather.weatherCode,
-      windSpeed: baseWeather.windSpeed,
-      soilMoisture: baseWeather.soilMoisture,
-      usAqi: baseWeather.usAqi,
-      europeanAqi: baseWeather.europeanAqi,
-      uvIndex: baseWeather.uvIndex,
-      pm25: baseWeather.pm25,
-      pm10: baseWeather.pm10,
-      nitrogenDioxide: baseWeather.nitrogenDioxide,
-      sulphurDioxide: baseWeather.sulphurDioxide,
-      carbonMonoxide: baseWeather.carbonMonoxide,
-      ozone: baseWeather.ozone,
-      isDaylight: baseWeather.isDaylight,
-    );
+        if (snapshot.hasError || !snapshot.hasData) {
+          return _WeatherErrorView(
+            onRetry: () {
+              setState(_loadWeather);
+            },
+          );
+        }
 
-    final personalizedCards = MockWeatherService.getPersonalizedCards(
-      widget.persona,
-    );
+        final weather = snapshot.data!;
 
-    final mappedCards = personalizedCards
-        .map((card) => CardMapper.map(card, weather))
-        .whereType<CardDisplayData>()
-        .toList();
+        final personalizedCards = MockWeatherService.getPersonalizedCards(
+          widget.persona,
+        );
 
-    final priorityCards = mappedCards.take(4).toList();
-    final secondaryCards = mappedCards.skip(4).take(4).toList();
+        final mappedCards = personalizedCards
+            .map((card) => CardMapper.map(card, weather))
+            .whereType<CardDisplayData>()
+            .toList();
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          WeatherBackground(weather: weather),
+        final priorityCards = mappedCards.take(4).toList();
+        final secondaryCards = mappedCards.skip(4).take(4).toList();
 
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 120),
-              child: Column(
-                children: [
-                  TopBar(
-                    onMenuTap: widget.onMenuTap,
-                    location: _selectedLocation,
-                    onLocationTap: _changeLocation,
-                    onNotificationsTap: () => _openNotifications(weather),
-                    showNotificationDot: buildWeatherAlerts(weather).isNotEmpty,
-                  ),
-                  const SizedBox(height: 24),
+        final alerts = buildWeatherAlerts(weather);
+        final homepageAlert =
+            alerts.where((alert) => alert.severity == 'Critical').isNotEmpty
+            ? alerts.firstWhere((alert) => alert.severity == 'Critical')
+            : null;
 
-                  MainWeather(weather: weather),
+        return Scaffold(
+          body: Stack(
+            children: [
+              _WeatherBackground(weather: weather),
 
-                  const SizedBox(height: 28),
+              SafeArea(
+                child: RefreshIndicator(
+                  onRefresh: _refreshWeather,
+                  color: const Color(0xFF7FE7D6),
+                  backgroundColor: const Color(0xFF182A3D),
+                  displacement: 58,
+                  strokeWidth: 2.4,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(18, 12, 18, 120),
+                    child: AnimatedBuilder(
+                      animation: _refreshAnimationController,
+                      builder: (context, child) {
+                        final progress = _refreshAnimationController.value;
 
-                  SectionTitle(title: 'PERSONALIZED FOR YOU'),
-
-                  const SizedBox(height: 12),
-
-                  ...priorityCards.map(
-                    (card) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: PriorityCard(
-                        icon: card.icon,
-                        title: card.title,
-                        value: card.value,
-                        status: card.status,
-                        insight: card.insight,
-                        indicatorColor: card.indicatorColor,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            _weatherDetailRoute(
-                              card: card,
-                              persona: widget.persona,
-                              weather: weather,
+                        return Column(
+                          children: [
+                            _LayeredRefreshColumn(
+                              progress: progress,
+                              child: child!,
                             ),
-                          );
-                        },
+                          ],
+                        );
+                      },
+                      child: Column(
+                        children: [
+                          TopBar(
+                            onMenuTap: widget.onMenuTap,
+                            location: _selectedLocation,
+                            onLocationTap: _changeLocation,
+                            onNotificationsTap: () =>
+                                _openNotifications(weather),
+                            showNotificationDot: _unreadAlertKeys.isNotEmpty,
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          MainWeather(weather: weather),
+
+                          if (homepageAlert != null) ...[
+                            const SizedBox(height: 18),
+                            SevereAlertPoster(
+                              icon: homepageAlert.icon,
+                              title: homepageAlert.title,
+                              message: homepageAlert.message,
+                              severity: homepageAlert.severity,
+                              location: homepageAlert.location,
+                              status: homepageAlert.status,
+                            ),
+                          ],
+
+                          const SizedBox(height: 28),
+
+                          SectionTitle(title: 'PERSONALIZED FOR YOU'),
+
+                          const SizedBox(height: 12),
+
+                          ...priorityCards.map(
+                            (card) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: PriorityCard(
+                                icon: card.icon,
+                                title: card.title,
+                                value: card.value,
+                                status: card.status,
+                                insight: card.insight,
+                                indicatorColor: card.indicatorColor,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    _weatherDetailRoute(
+                                      card: card,
+                                      persona: widget.persona,
+                                      weather: weather,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          Row(
+                            children: [
+                              if (secondaryCards.isNotEmpty)
+                                Expanded(
+                                  child: SmallMetricCard(
+                                    icon: secondaryCards[0].icon,
+                                    title: secondaryCards[0].title,
+                                    value: secondaryCards[0].value,
+                                    indicatorColor:
+                                        secondaryCards[0].indicatorColor,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        _weatherDetailRoute(
+                                          card: secondaryCards[0],
+                                          persona: widget.persona,
+                                          weather: weather,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              if (secondaryCards.length > 1) ...[
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: SmallMetricCard(
+                                    icon: secondaryCards[1].icon,
+                                    title: secondaryCards[1].title,
+                                    value: secondaryCards[1].value,
+                                    indicatorColor:
+                                        secondaryCards[1].indicatorColor,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        _weatherDetailRoute(
+                                          card: secondaryCards[1],
+                                          persona: widget.persona,
+                                          weather: weather,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          Row(
+                            children: [
+                              if (secondaryCards.length > 2)
+                                Expanded(
+                                  child: SmallMetricCard(
+                                    icon: secondaryCards[2].icon,
+                                    title: secondaryCards[2].title,
+                                    value: secondaryCards[2].value,
+                                    indicatorColor:
+                                        secondaryCards[2].indicatorColor,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        _weatherDetailRoute(
+                                          card: secondaryCards[2],
+                                          persona: widget.persona,
+                                          weather: weather,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              if (secondaryCards.length > 3) ...[
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: SmallMetricCard(
+                                    icon: secondaryCards[3].icon,
+                                    title: secondaryCards[3].title,
+                                    value: secondaryCards[3].value,
+                                    indicatorColor:
+                                        secondaryCards[3].indicatorColor,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        _weatherDetailRoute(
+                                          card: secondaryCards[3],
+                                          persona: widget.persona,
+                                          weather: weather,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+
+                          if (weather.hourly.isNotEmpty) ...[
+                            const SizedBox(height: 28),
+                            HourlyForecast(hourly: weather.hourly),
+                          ],
+
+                          if (weather.daily.isNotEmpty) ...[
+                            const SizedBox(height: 28),
+                            DailyForecast(daily: weather.daily),
+                          ],
+
+                          const SizedBox(height: 34),
+
+                          Column(
+                            children: [
+                              Text(
+                                'MAUSAM',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.72),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 3.2,
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              Text(
+                                'Your weather, your way.',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.48),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 8),
-
-                  Row(
-                    children: [
-                      if (secondaryCards.isNotEmpty)
-                        Expanded(
-                          child: SmallMetricCard(
-                            icon: secondaryCards[0].icon,
-                            title: secondaryCards[0].title,
-                            value: secondaryCards[0].value,
-                            indicatorColor: secondaryCards[0].indicatorColor,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                _weatherDetailRoute(
-                                  card: secondaryCards[0],
-                                  persona: widget.persona,
-                                  weather: weather,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      if (secondaryCards.length > 1) ...[
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: SmallMetricCard(
-                            icon: secondaryCards[1].icon,
-                            title: secondaryCards[1].title,
-                            value: secondaryCards[1].value,
-                            indicatorColor: secondaryCards[1].indicatorColor,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                _weatherDetailRoute(
-                                  card: secondaryCards[1],
-                                  persona: widget.persona,
-                                  weather: weather,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      if (secondaryCards.length > 2)
-                        Expanded(
-                          child: SmallMetricCard(
-                            icon: secondaryCards[2].icon,
-                            title: secondaryCards[2].title,
-                            value: secondaryCards[2].value,
-                            indicatorColor: secondaryCards[2].indicatorColor,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                _weatherDetailRoute(
-                                  card: secondaryCards[2],
-                                  persona: widget.persona,
-                                  weather: weather,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      if (secondaryCards.length > 3) ...[
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: SmallMetricCard(
-                            icon: secondaryCards[3].icon,
-                            title: secondaryCards[3].title,
-                            value: secondaryCards[3].value,
-                            indicatorColor: secondaryCards[3].indicatorColor,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                _weatherDetailRoute(
-                                  card: secondaryCards[3],
-                                  persona: widget.persona,
-                                  weather: weather,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
 
-          if (widget.showBottomNav)
-            const Positioned(
-              left: 18,
-              right: 18,
-              bottom: 18,
-              child: FloatingNavBar(),
-            ),
-        ],
+              if (widget.showBottomNav)
+                const Positioned(
+                  left: 18,
+                  right: 18,
+                  bottom: 18,
+                  child: FloatingNavBar(),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LayeredRefreshColumn extends StatelessWidget {
+  final double progress;
+  final Widget child;
+
+  const _LayeredRefreshColumn({required this.progress, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (child is! Column) {
+      return child;
+    }
+
+    final column = child as Column;
+    final children = column.children;
+
+    return Column(
+      children: List.generate(children.length, (index) {
+        final totalLayers = children.length;
+        final layerSize = 0.72 / totalLayers;
+        final start = (index * layerSize).clamp(0.0, 0.72);
+        final end = (start + 0.28).clamp(0.0, 1.0);
+
+        final localProgress = progress <= start
+            ? 0.0
+            : progress >= end
+            ? 1.0
+            : Curves.easeOut.transform((progress - start) / (end - start));
+
+        final opacity = localProgress.clamp(0.0, 1.0);
+        final offset = 0.035 * (1.0 - localProgress);
+
+        return Opacity(
+          opacity: opacity,
+          child: Transform.translate(
+            offset: Offset(0, 12 * offset),
+            child: children[index],
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _WeatherLoadingView extends StatelessWidget {
+  const _WeatherLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF101C2C),
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _WeatherErrorView extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _WeatherErrorView({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF101C2C),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.cloud_off_rounded,
+                size: 48,
+                color: Colors.white70,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Unable to load weather',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Check your connection and try again.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60, fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -5720,7 +5202,7 @@ class FloatingNavBar extends StatelessWidget {
           child: Row(
             children: [
               _NavItem(icon: Icons.home_rounded, label: 'Home', active: true),
-              _NavItem(icon: Icons.calendar_today_rounded, label: 'My Day'),
+              _NavItem(icon: Icons.calendar_today_rounded, label: 'Routines'),
               _NavItem(icon: Icons.notifications_none_rounded, label: 'Alerts'),
               _NavItem(icon: Icons.person_outline_rounded, label: 'Profile'),
             ],
@@ -5835,8 +5317,13 @@ class WeatherBackground extends StatelessWidget {
 
 class LocationSearchScreen extends StatefulWidget {
   final String currentLocation;
+  final Map<String, SelectedLocation> defaultLocations;
 
-  const LocationSearchScreen({super.key, required this.currentLocation});
+  const LocationSearchScreen({
+    super.key,
+    required this.currentLocation,
+    required this.defaultLocations,
+  });
 
   @override
   State<LocationSearchScreen> createState() => _LocationSearchScreenState();
@@ -5845,28 +5332,19 @@ class LocationSearchScreen extends StatefulWidget {
 class _LocationSearchScreenState extends State<LocationSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
 
-  final List<String> _cities = const [
-    'Ghaziabad, UP',
-    'Delhi, Delhi',
-    'Noida, UP',
-    'Lucknow, UP',
-    'Kanpur, UP',
-    'Agra, UP',
-    'Jaipur, Rajasthan',
-    'Mumbai, Maharashtra',
-    'Pune, Maharashtra',
-    'Bengaluru, Karnataka',
-    'Hyderabad, Telangana',
-    'Chennai, Tamil Nadu',
-    'Kolkata, West Bengal',
-    'Ahmedabad, Gujarat',
-    'Chandigarh, Chandigarh',
-  ];
+  List<String> get _cities => widget.defaultLocations.keys.toList();
 
   String _query = '';
+  Timer? _searchDebounce;
+  int _searchRequestId = 0;
+
+  List<LocationSearchResult> _searchResults = const [];
+  bool _isSearching = false;
+  String? _searchError;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -5882,7 +5360,180 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
   }
 
   void _selectLocation(String city) {
-    Navigator.of(context).pop(city);
+    final location = widget.defaultLocations[city];
+
+    if (location != null) {
+      Navigator.of(context).pop(location);
+    }
+  }
+
+  void _selectSearchResult(LocationSearchResult result) {
+    Navigator.of(context).pop(
+      SelectedLocation(
+        name: result.name,
+        displayName: result.displayName,
+        latitude: result.latitude,
+        longitude: result.longitude,
+      ),
+    );
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+
+    final query = value.trim();
+
+    setState(() {
+      _query = value;
+      _searchResults = const [];
+      _searchError = null;
+      _isSearching = query.length >= 2;
+    });
+
+    if (query.length < 2) {
+      return;
+    }
+
+    final requestId = ++_searchRequestId;
+
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 500),
+      () => _performSearch(query, requestId),
+    );
+  }
+
+  Future<void> _performSearch(String query, int requestId) async {
+    try {
+      final results = await LocationSearchService.search(query);
+
+      if (!mounted || requestId != _searchRequestId) {
+        return;
+      }
+
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+        _searchError = null;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _searchRequestId) {
+        return;
+      }
+
+      setState(() {
+        _searchResults = const [];
+        _isSearching = false;
+        _searchError = 'Unable to search locations right now.';
+      });
+    }
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    ++_searchRequestId;
+
+    _searchController.clear();
+
+    setState(() {
+      _query = '';
+      _searchResults = const [];
+      _isSearching = false;
+      _searchError = null;
+    });
+  }
+
+  Widget _buildSearchResults() {
+    if (_isSearching) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+      );
+    }
+
+    if (_searchError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 30),
+          child: Text(
+            _searchError!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white60, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 30),
+          child: Text(
+            'No locations found. Try another city name.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white60, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 9),
+          child: GestureDetector(
+            onTap: () => _selectSearchResult(result),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 15),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.045),
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_on_outlined,
+                    color: Colors.white.withValues(alpha: 0.72),
+                    size: 21,
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          result.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          result.subtitle,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white54,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _useCurrentLocation() {
@@ -5944,11 +5595,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
                     ),
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (value) {
-                        setState(() {
-                          _query = value;
-                        });
-                      },
+                      onChanged: _onSearchChanged,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       cursorColor: Colors.white,
                       decoration: InputDecoration(
@@ -5966,12 +5613,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
                                   Icons.close_rounded,
                                   color: Colors.white.withValues(alpha: 0.55),
                                 ),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {
-                                    _query = '';
-                                  });
-                                },
+                                onPressed: _clearSearch,
                               )
                             : null,
                         border: InputBorder.none,
@@ -6054,64 +5696,70 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
                 const SizedBox(height: 22),
 
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
-                    itemCount: _filteredCities.length,
-                    itemBuilder: (context, index) {
-                      final city = _filteredCities[index];
-                      final selected = city == widget.currentLocation;
+                  child: _query.trim().length >= 2
+                      ? _buildSearchResults()
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
+                          itemCount: _filteredCities.length,
+                          itemBuilder: (context, index) {
+                            final city = _filteredCities[index];
+                            final selected = city == widget.currentLocation;
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 9),
-                        child: GestureDetector(
-                          onTap: () => _selectLocation(city),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 17,
-                              vertical: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? Colors.white.withValues(alpha: 0.10)
-                                  : Colors.white.withValues(alpha: 0.045),
-                              borderRadius: BorderRadius.circular(17),
-                              border: Border.all(
-                                color: selected
-                                    ? Colors.white.withValues(alpha: 0.20)
-                                    : Colors.white.withValues(alpha: 0.07),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.location_on_outlined,
-                                  color: Colors.white.withValues(alpha: 0.72),
-                                  size: 21,
-                                ),
-                                const SizedBox(width: 13),
-                                Expanded(
-                                  child: Text(
-                                    city,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 9),
+                              child: GestureDetector(
+                                onTap: () => _selectLocation(city),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 17,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? Colors.white.withValues(alpha: 0.10)
+                                        : Colors.white.withValues(alpha: 0.045),
+                                    borderRadius: BorderRadius.circular(17),
+                                    border: Border.all(
+                                      color: selected
+                                          ? Colors.white.withValues(alpha: 0.20)
+                                          : Colors.white.withValues(
+                                              alpha: 0.07,
+                                            ),
                                     ),
                                   ),
-                                ),
-                                if (selected)
-                                  const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: Colors.white,
-                                    size: 21,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.location_on_outlined,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.72,
+                                        ),
+                                        size: 21,
+                                      ),
+                                      const SizedBox(width: 13),
+                                      Expanded(
+                                        child: Text(
+                                          city,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      if (selected)
+                                        const Icon(
+                                          Icons.check_circle_rounded,
+                                          color: Colors.white,
+                                          size: 21,
+                                        ),
+                                    ],
                                   ),
-                              ],
-                            ),
-                          ),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
@@ -6802,6 +6450,1868 @@ class GlassButton extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _FunctionalNavBar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onSelected;
+
+  const _FunctionalNavBar({
+    required this.currentIndex,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          height: 70,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.40),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            children: [
+              _FunctionalNavItem(
+                icon: Icons.home_rounded,
+                label: 'Home',
+                active: currentIndex == 0,
+                onTap: () => onSelected(0),
+              ),
+              _FunctionalNavItem(
+                icon: Icons.calendar_today_rounded,
+                label: 'My Day',
+                active: currentIndex == 1,
+                onTap: () => onSelected(1),
+              ),
+              _FunctionalNavItem(
+                icon: Icons.map_outlined,
+                label: 'Map',
+                active: currentIndex == 2,
+                onTap: () => onSelected(2),
+              ),
+              _FunctionalNavItem(
+                icon: Icons.person_outline_rounded,
+                label: 'Profile',
+                active: currentIndex == 3,
+                onTap: () => onSelected(3),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FunctionalNavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _FunctionalNavItem({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = active
+        ? Colors.white
+        : Colors.white.withValues(alpha: 0.55);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: iconColor, size: 23),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: iconColor,
+                fontSize: 10,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            const SizedBox(height: 3),
+            if (active)
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ProfilePage extends StatefulWidget {
+  final String persona;
+  final ValueChanged<String> onPersonaChanged;
+
+  const ProfilePage({
+    super.key,
+    required this.persona,
+    required this.onPersonaChanged,
+  });
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  final UserApiService _userApiService = UserApiService();
+
+  UserProfile? _user;
+  bool _isLoadingUser = true;
+  String? _userError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    try {
+      final user = await _userApiService.getCurrentUser();
+
+      if (!mounted) return;
+
+      setState(() {
+        _user = user;
+        _isLoadingUser = false;
+        _userError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingUser = false;
+        _userError = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  String get _personaTitle {
+    switch (widget.persona) {
+      case 'Farmer':
+        return 'Farmer';
+      case 'Traveler':
+        return 'Traveler';
+      default:
+        return 'Fitness';
+    }
+  }
+
+  IconData get _personaIcon {
+    switch (widget.persona) {
+      case 'Farmer':
+        return Icons.agriculture_outlined;
+      case 'Traveler':
+        return Icons.luggage_outlined;
+      default:
+        return Icons.fitness_center_rounded;
+    }
+  }
+
+  String get _personaDescription {
+    switch (widget.persona) {
+      case 'Farmer':
+        return 'Weather insights are personalized for agricultural activity.';
+      case 'Traveler':
+        return 'Weather insights are personalized for travel and mobility.';
+      default:
+        return 'Weather insights are personalized for an active lifestyle.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const _OnboardingBackground(),
+        SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 30, 20, 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _PageHeader(
+                  title: 'Profile',
+                  subtitle: 'Your Mausam personalization profile',
+                  icon: Icons.person_outline_rounded,
+                ),
+                const SizedBox(height: 28),
+
+                GlassContainer(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.person_rounded,
+                          color: Colors.white,
+                          size: 29,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _user?.name ?? 'Mausam User',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 21,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _user?.email ??
+                                  (_isLoadingUser
+                                      ? 'Loading profile...'
+                                      : 'Profile information unavailable'),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 7),
+                            Text(
+                              _personaDescription,
+                              style: const TextStyle(
+                                color: Colors.white60,
+                                fontSize: 11,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                const _ProfileSectionTitle(title: 'PERSONALIZATION'),
+
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    children: [
+                      _ProfileInfoRow(
+                        icon: Icons.psychology_outlined,
+                        title: 'Personalization',
+                        value: _userError == null
+                            ? 'Active'
+                            : 'Sign in required',
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: 52,
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                      const _ProfileInfoRow(
+                        icon: Icons.location_on_outlined,
+                        title: 'Location',
+                        value: 'Ghaziabad, UP',
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                const _ProfileSectionTitle(title: 'PERSONA'),
+
+                GlassContainer(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      _PersonaOption(
+                        icon: Icons.fitness_center_rounded,
+                        title: 'Fitness',
+                        subtitle:
+                            'Health, UV, air quality and outdoor conditions.',
+                        selected: widget.persona == 'Fitness',
+                        onTap: () => widget.onPersonaChanged('Fitness'),
+                      ),
+                      const SizedBox(height: 10),
+                      _PersonaOption(
+                        icon: Icons.agriculture_outlined,
+                        title: 'Farmer',
+                        subtitle: 'Weather conditions relevant to agricultural activity.',
+                        selected: widget.persona == 'Farmer',
+                        onTap: () => widget.onPersonaChanged('Farmer'),
+                      ),
+                      const SizedBox(height: 10),
+                      _PersonaOption(
+                        icon: Icons.luggage_outlined,
+                        title: 'Traveler',
+                        subtitle: 'Travel-friendly weather and environmental information.',
+                        selected: widget.persona == 'Traveler',
+                        onTap: () => widget.onPersonaChanged('Traveler'),
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (_userError != null) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    _userError!,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PageBackground extends StatelessWidget {
+  final Widget child;
+
+  const _PageBackground({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF263B52), Color(0xFF3D5870), Color(0xFF667D90)],
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _PageHeader extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+
+  const _PageHeader({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+          ),
+          child: Icon(icon, color: Colors.white, size: 25),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileSectionTitle extends StatelessWidget {
+  final String title;
+
+  const _ProfileSectionTitle({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 9),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+
+  const _ProfileInfoRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: Row(
+        children: [
+          const SizedBox(width: 14),
+          Icon(icon, color: Colors.white70, size: 21),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(width: 14),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonaOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _PersonaOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.selected = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.055),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? Colors.white.withValues(alpha: 0.28)
+                : Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white, size: 21),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (selected) ...[
+                        const SizedBox(width: 7),
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 11,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SettingsPage extends StatefulWidget {
+  final ValueChanged<String>? onPersonaChanged;
+
+  const SettingsPage({super.key, this.onPersonaChanged});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
+
+  UserPreferences? _preferences;
+  bool _isLoadingPreferences = true;
+  bool _isSaving = false;
+  String? _preferencesError;
+
+  String persona = 'Fitness';
+  String interests = 'Outdoor Run, Air Quality';
+  String location = 'Ghaziabad, UP';
+  String weatherAlerts = 'Severe Only';
+  String temperatureUnit = 'Celsius (°C)';
+  String windSpeed = 'km/h';
+  String language = 'English';
+
+  bool personalizeHomepage = true;
+  bool improveRecommendations = true;
+
+  bool officialAlerts = true;
+  bool routineAlerts = true;
+  bool rainAlerts = true;
+  bool aqiAlerts = true;
+  bool dailyBriefing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    try {
+      final preferences = await _preferencesApiService.getPreferences();
+
+      if (!mounted) return;
+
+      setState(() {
+        _preferences = preferences;
+        _isLoadingPreferences = false;
+        _preferencesError = null;
+
+        persona = _displayPersona(preferences.persona);
+        interests = _displayInterests(preferences.interests);
+        temperatureUnit = _displayTemperatureUnit(preferences.temperatureUnit);
+        language = _displayLanguage(preferences.preferredLanguage);
+
+        personalizeHomepage = preferences.personalization.personalizedHomepage;
+        improveRecommendations = preferences.personalization.learnFromActivity;
+
+        officialAlerts = preferences.notifications.officialAlerts;
+        routineAlerts = preferences.notifications.routineAlerts;
+        rainAlerts = preferences.notifications.rainAlerts;
+        aqiAlerts = preferences.notifications.aqiAlerts;
+        dailyBriefing = preferences.notifications.dailySummary;
+        weatherAlerts = _displayWeatherAlerts(preferences.notifications);
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingPreferences = false;
+        _preferencesError = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  String _displayPersona(String? value) {
+    switch (value) {
+      case 'fitness_enthusiast':
+      case 'fitness':
+      case 'health':
+        return 'Fitness';
+      case 'farmer':
+        return 'Farmer';
+      case 'traveler':
+      case 'traveller':
+        return 'Traveler';
+      default:
+        return 'Fitness';
+    }
+  }
+
+  String _displayInterests(List<String> values) {
+    if (values.isEmpty) {
+      return 'Outdoor Run, Air Quality';
+    }
+
+    return values
+        .map((value) => value.replaceAll('_', ' '))
+        .map(
+          (value) => value
+              .split(' ')
+              .map(
+                (word) => word.isEmpty
+                    ? word
+                    : '${word[0].toUpperCase()}${word.substring(1)}',
+              )
+              .join(' '),
+        )
+        .join(', ');
+  }
+
+  String _displayTemperatureUnit(String? value) {
+    switch (value) {
+      case 'fahrenheit':
+      case 'F':
+      case '°F':
+        return 'Fahrenheit (°F)';
+      case 'celsius':
+      case 'C':
+      case '°C':
+      default:
+        return 'Celsius (°C)';
+    }
+  }
+
+  String _displayWeatherAlerts(NotificationSettings notifications) {
+    if (!notifications.officialAlerts &&
+        !notifications.routineAlerts &&
+        !notifications.rainAlerts &&
+        !notifications.aqiAlerts) {
+      return 'None';
+    }
+
+    if (notifications.officialAlerts &&
+        notifications.routineAlerts &&
+        notifications.rainAlerts &&
+        notifications.aqiAlerts) {
+      return 'All Alerts';
+    }
+
+    if (notifications.officialAlerts &&
+        !notifications.routineAlerts &&
+        !notifications.rainAlerts &&
+        !notifications.aqiAlerts) {
+      return 'Severe Only';
+    }
+
+    return 'Custom';
+  }
+
+  String _displayLanguage(String? value) {
+    switch (value) {
+      case 'hi':
+      case 'hindi':
+        return 'Hindi';
+      case 'en':
+      case 'english':
+      default:
+        return 'English';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const _OnboardingBackground(),
+        Material(
+          type: MaterialType.transparency,
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 40),
+              children: [
+                Row(
+                  children: [
+                    GlassButton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 14),
+                    const Text(
+                      'Settings',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 28),
+
+                if (_isLoadingPreferences)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 18),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.8,
+                            color: Colors.white.withValues(alpha: 0.70),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Loading your preferences...',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                if (_preferencesError != null && !_isLoadingPreferences)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 18),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.055),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          color: Colors.white.withValues(alpha: 0.62),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Sign in to load and save your preferences.',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.58),
+                              fontSize: 12,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const _SettingsGlassSectionTitle(
+                  title: 'PERSONA & PREFERENCES',
+                ),
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    children: [
+                      _GlassActionRow(
+                        title: 'Change persona',
+                        value: persona,
+                        subtitle: 'Choose how Mausam prioritizes your weather',
+                        icon: Icons.person_outline_rounded,
+                        onTap: _changePersona,
+                      ),
+                      const _GlassDivider(),
+                      _GlassActionRow(
+                        title: 'Edit interests',
+                        value: interests,
+                        subtitle: 'Activities and conditions you care about',
+                        icon: Icons.tune_rounded,
+                        onTap: _editInterests,
+                      ),
+                      const _GlassDivider(),
+                      _GlassSwitchRow(
+                        title: 'Personalize homepage',
+                        subtitle: 'Prioritize weather information for you',
+                        icon: Icons.auto_awesome_rounded,
+                        value: personalizeHomepage,
+                        onChanged: (value) {
+                          _updatePersonalization(personalizedHomepage: value);
+                        },
+                      ),
+                      const _GlassDivider(),
+                      _GlassSwitchRow(
+                        title: 'Improve recommendations',
+                        subtitle: 'Use your activity preferences to improve suggestions',
+                        icon: Icons.insights_rounded,
+                        value: improveRecommendations,
+                        onChanged: (value) {
+                          _updatePersonalization(learnFromActivity: value);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                const _SettingsGlassSectionTitle(title: 'LOCATION'),
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    children: [
+                      _GlassActionRow(
+                        title: 'Primary Location',
+                        value: location,
+                        subtitle: 'Used for your default weather updates',
+                        icon: Icons.location_on_outlined,
+                        onTap: _changeLocation,
+                      ),
+                      const _GlassDivider(),
+                      _GlassActionRow(
+                        title: 'Manage Saved Locations',
+                        value: '3 Saved',
+                        subtitle: 'Quickly access places you check often',
+                        icon: Icons.bookmark_border_rounded,
+                        onTap: _manageLocations,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                const _SettingsGlassSectionTitle(title: 'NOTIFICATIONS'),
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    children: [
+                      _GlassActionRow(
+                        title: 'Weather Alerts',
+                        value: weatherAlerts,
+                        subtitle: 'Choose when Mausam should alert you',
+                        icon: Icons.notifications_none_rounded,
+                        onTap: _weatherAlertSettings,
+                      ),
+                      const _GlassDivider(),
+                      _GlassSwitchRow(
+                        title: 'Daily Briefing',
+                        subtitle: 'A concise summary of your day’s weather',
+                        icon: Icons.wb_sunny_outlined,
+                        value: dailyBriefing,
+                        onChanged: (value) {
+                          _updateNotifications(dailySummary: value);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                const _SettingsGlassSectionTitle(title: 'UNITS & LANGUAGE'),
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    children: [
+                      _GlassActionRow(
+                        title: 'Temperature Unit',
+                        value: temperatureUnit,
+                        subtitle: 'How temperatures are displayed',
+                        icon: Icons.thermostat_outlined,
+                        onTap: _changeTemperatureUnit,
+                      ),
+                      const _GlassDivider(),
+                      _GlassActionRow(
+                        title: 'Wind Speed',
+                        value: windSpeed,
+                        subtitle: 'How wind speeds are displayed',
+                        icon: Icons.air_rounded,
+                        onTap: _changeWindSpeed,
+                      ),
+                      const _GlassDivider(),
+                      _GlassActionRow(
+                        title: 'App Language',
+                        value: language,
+                        subtitle: 'Language used throughout Mausam',
+                        icon: Icons.language_rounded,
+                        onTap: _changeLanguage,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                const _SettingsGlassSectionTitle(title: 'ABOUT'),
+                GlassContainer(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    children: [
+                      const _GlassInfoRow(
+                        title: 'App Version',
+                        value: 'SIH 2026 Prototype',
+                        icon: Icons.info_outline_rounded,
+                      ),
+                      const _GlassDivider(),
+                      _GlassActionRow(
+                        title: 'Terms of Service',
+                        icon: Icons.description_outlined,
+                        onTap: () => _showInfo(
+                          'Terms of Service',
+                          'Terms and conditions for the Mausam personalized weather experience.',
+                        ),
+                      ),
+                      const _GlassDivider(),
+                      _GlassActionRow(
+                        title: 'Privacy Policy',
+                        icon: Icons.lock_outline_rounded,
+                        onTap: () => _showInfo(
+                          'Privacy Policy',
+                          'Your preferences are used to improve your personalized Mausam experience.',
+                        ),
+                      ),
+                      const _GlassDivider(),
+                      _GlassActionRow(
+                        title: 'IMD Attribution',
+                        icon: Icons.cloud_outlined,
+                        onTap: () => _showInfo(
+                          'IMD Attribution',
+                          'Weather information is presented using data associated with the India Meteorological Department.',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 28),
+
+                SizedBox(
+                  height: 50,
+                  child: OutlinedButton(
+                    onPressed: _signOut,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.22),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      backgroundColor: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    child: const Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _updatePersonalization({
+    bool? personalizedHomepage,
+    bool? learnFromActivity,
+  }) async {
+    if (_preferences == null || _isSaving) return;
+
+    final current = _preferences!.personalization;
+
+    setState(() {
+      if (personalizedHomepage != null) {
+        personalizeHomepage = personalizedHomepage;
+      }
+      if (learnFromActivity != null) {
+        improveRecommendations = learnFromActivity;
+      }
+      _isSaving = true;
+    });
+
+    try {
+      final updated = await _preferencesApiService.updatePreferences(
+        personalization: {
+          'personalized_homepage':
+              personalizedHomepage ?? current.personalizedHomepage,
+          'routine_impact': current.routineImpact,
+          'learn_from_activity': learnFromActivity ?? current.learnFromActivity,
+        },
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _preferences = updated;
+        _isSaving = false;
+        _preferencesError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        if (personalizedHomepage != null) {
+          personalizeHomepage = current.personalizedHomepage;
+        }
+        if (learnFromActivity != null) {
+          improveRecommendations = current.learnFromActivity;
+        }
+        _isSaving = false;
+        _preferencesError = error.toString().replaceFirst('Exception: ', '');
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_preferencesError!),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF263B52),
+        ),
+      );
+    }
+  }
+
+  Future<void> _updateNotifications({
+    bool? officialAlerts,
+    bool? routineAlerts,
+    bool? rainAlerts,
+    bool? aqiAlerts,
+    bool? dailySummary,
+  }) async {
+    if (_preferences == null || _isSaving) return;
+
+    final current = _preferences!.notifications;
+
+    setState(() {
+      if (dailySummary != null) {
+        dailyBriefing = dailySummary;
+      }
+      _isSaving = true;
+    });
+
+    try {
+      final updated = await _preferencesApiService.updatePreferences(
+        notifications: {
+          'official_alerts': officialAlerts ?? current.officialAlerts,
+          'routine_alerts': routineAlerts ?? current.routineAlerts,
+          'rain_alerts': rainAlerts ?? current.rainAlerts,
+          'aqi_alerts': aqiAlerts ?? current.aqiAlerts,
+          'daily_summary': dailySummary ?? current.dailySummary,
+        },
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _preferences = updated;
+        _isSaving = false;
+        _preferencesError = null;
+        officialAlerts = updated.notifications.officialAlerts;
+        routineAlerts = updated.notifications.routineAlerts;
+        rainAlerts = updated.notifications.rainAlerts;
+        aqiAlerts = updated.notifications.aqiAlerts;
+        dailyBriefing = updated.notifications.dailySummary;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        if (dailySummary != null) {
+          dailyBriefing = current.dailySummary;
+        }
+        _isSaving = false;
+        _preferencesError = error.toString().replaceFirst('Exception: ', '');
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_preferencesError!),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF263B52),
+        ),
+      );
+    }
+  }
+
+  String _backendPersona(String value) {
+    switch (value) {
+      case 'Farmer':
+        return 'farmer';
+      case 'Traveler':
+        return 'traveller';
+      default:
+        return 'health';
+    }
+  }
+
+  Future<void> _updatePersona(String value) async {
+    if (_preferences == null || _isSaving) return;
+
+    final previousPersona = persona;
+    setState(() {
+      persona = value;
+      _isSaving = true;
+    });
+
+    try {
+      final updated = await _preferencesApiService.updatePreferences(
+        persona: _backendPersona(value),
+      );
+
+      if (!mounted) return;
+
+      final updatedPersona = _displayPersona(updated.persona);
+
+      setState(() {
+        _preferences = updated;
+        _isSaving = false;
+        _preferencesError = null;
+        persona = updatedPersona;
+      });
+
+      widget.onPersonaChanged?.call(updatedPersona);
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        persona = previousPersona;
+        _isSaving = false;
+        _preferencesError = error.toString().replaceFirst('Exception: ', '');
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_preferencesError!),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF263B52),
+        ),
+      );
+    }
+  }
+
+  void _changePersona() {
+    _showChoiceSheet(
+      title: 'Change persona',
+      options: const ['Fitness', 'Farmer', 'Traveler'],
+      selected: persona,
+      onSelected: (value) => _updatePersona(value),
+    );
+  }
+
+  void _editInterests() {
+    _showChoiceSheet(
+      title: 'Edit interests',
+      options: const [
+        'Outdoor Run, Air Quality',
+        'Outdoor Activities',
+        'Air Quality',
+        'Fitness & Health',
+        'Travel',
+      ],
+      selected: interests,
+      onSelected: (value) => setState(() => interests = value),
+    );
+  }
+
+  void _changeLocation() {
+    _showChoiceSheet(
+      title: 'Primary Location',
+      options: const ['Ghaziabad, UP', 'Delhi', 'Noida', 'Lucknow'],
+      selected: location,
+      onSelected: (value) => setState(() => location = value),
+    );
+  }
+
+  void _manageLocations() {
+    _showChoiceSheet(
+      title: 'Saved Locations',
+      options: const ['Ghaziabad, UP', 'Delhi', 'Noida'],
+      selected: location,
+      onSelected: (value) => setState(() => location = value),
+    );
+  }
+
+  void _weatherAlertSettings() {
+    _showChoiceSheet(
+      title: 'Weather Alerts',
+      options: const ['Severe Only', 'All Alerts', 'None'],
+      selected: weatherAlerts,
+      onSelected: (value) {
+        switch (value) {
+          case 'Severe Only':
+            _updateNotifications(
+              officialAlerts: true,
+              routineAlerts: false,
+              rainAlerts: false,
+              aqiAlerts: false,
+            );
+            break;
+          case 'All Alerts':
+            _updateNotifications(
+              officialAlerts: true,
+              routineAlerts: true,
+              rainAlerts: true,
+              aqiAlerts: true,
+            );
+            break;
+          case 'None':
+            _updateNotifications(
+              officialAlerts: false,
+              routineAlerts: false,
+              rainAlerts: false,
+              aqiAlerts: false,
+            );
+            break;
+        }
+        setState(() => weatherAlerts = value);
+      },
+    );
+  }
+
+  void _changeTemperatureUnit() {
+    _showChoiceSheet(
+      title: 'Temperature Unit',
+      options: const ['Celsius (°C)', 'Fahrenheit (°F)'],
+      selected: temperatureUnit,
+      onSelected: (value) => setState(() => temperatureUnit = value),
+    );
+  }
+
+  void _changeWindSpeed() {
+    _showChoiceSheet(
+      title: 'Wind Speed',
+      options: const ['km/h', 'm/s', 'mph'],
+      selected: windSpeed,
+      onSelected: (value) => setState(() => windSpeed = value),
+    );
+  }
+
+  void _changeLanguage() {
+    _showChoiceSheet(
+      title: 'App Language',
+      options: const ['English', 'Hindi'],
+      selected: language,
+      onSelected: (value) => setState(() => language = value),
+    );
+  }
+
+  void _showChoiceSheet({
+    required String title,
+    required List<String> options,
+    required String selected,
+    required ValueChanged<String> onSelected,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF263B52),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...options.map(
+                  (option) => ListTile(
+                    title: Text(
+                      option,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    trailing: option == selected
+                        ? const Icon(Icons.check_circle, color: Colors.white)
+                        : const Icon(
+                            Icons.chevron_right,
+                            color: Colors.white54,
+                          ),
+                    onTap: () {
+                      onSelected(option);
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showInfo(String title, String message) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF263B52),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _signOut() {
+    _showInfo(
+      'Sign Out',
+      'Authentication will be connected during the onboarding and login flow.',
+    );
+  }
+}
+
+class _SettingsGlassSectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SettingsGlassSectionTitle({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 9),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassDivider extends StatelessWidget {
+  const _GlassDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 1,
+      indent: 52,
+      color: Colors.white.withValues(alpha: 0.08),
+    );
+  }
+}
+
+class _GlassActionRow extends StatelessWidget {
+  final String title;
+  final String? value;
+  final String? subtitle;
+  final IconData? icon;
+  final VoidCallback onTap;
+
+  const _GlassActionRow({
+    required this.title,
+    this.value,
+    this.subtitle,
+    this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: subtitle != null ? 66 : 58,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.075),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.72),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.42),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (value != null) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    value!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.58),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 6),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white.withValues(alpha: 0.38),
+                size: 19,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassSwitchRow extends StatelessWidget {
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String? subtitle;
+  final IconData? icon;
+
+  const _GlassSwitchRow({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: subtitle != null ? 66 : 58,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.075),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: Colors.white.withValues(alpha: 0.72),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.42),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: Colors.white,
+              activeTrackColor: Colors.white24,
+              inactiveThumbColor: Colors.white54,
+              inactiveTrackColor: Colors.white12,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassInfoRow extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData? icon;
+
+  const _GlassInfoRow({required this.title, required this.value, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 58,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.075),
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: Colors.white.withValues(alpha: 0.72),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MapComingSoonPage extends StatelessWidget {
+  const MapComingSoonPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF101C2C),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const _OnboardingBackground(),
+          SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 118,
+                      height: 118,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.075),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 30,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.map_rounded,
+                        size: 58,
+                        color: Colors.white.withValues(alpha: 0.86),
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    const Text(
+                      'Weather Map',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Text(
+                      'Explore weather conditions across India, '
+                      'all in one place.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.66),
+                        fontSize: 15,
+                        height: 1.5,
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 17,
+                            color: Colors.white.withValues(alpha: 0.82),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Coming soon',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    Text(
+                      'Interactive weather maps and live weather layers '
+                      'will be available here.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.48),
+                        fontSize: 13,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SimplePage extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final String message;
+
+  const _SimplePage({
+    required this.title,
+    required this.icon,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF101C2C), Color(0xFF30465A), Color(0xFF687D8D)],
+        ),
+      ),
+      child: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white, size: 52),
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.70),
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

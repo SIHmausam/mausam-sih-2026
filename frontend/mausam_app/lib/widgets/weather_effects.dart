@@ -39,15 +39,9 @@ class _WeatherEffectsState extends State<WeatherEffects>
       (_) => _RainDrop.random(_random),
     );
 
-    _particles = List.generate(
-      22,
-      (_) => _AtmosphereParticle.random(_random),
-    );
+    _particles = List.generate(22, (_) => _AtmosphereParticle.random(_random));
 
-    _snowflakes = List.generate(
-      32,
-      (_) => _Snowflake.random(_random),
-    );
+    _snowflakes = List.generate(32, (_) => _Snowflake.random(_random));
   }
 
   @override
@@ -67,14 +61,11 @@ class _WeatherEffectsState extends State<WeatherEffects>
       (widget.weatherCode >= 71 && widget.weatherCode <= 77) ||
       (widget.weatherCode >= 85 && widget.weatherCode <= 86);
 
-  bool get _isFog =>
-      widget.weatherCode == 45 || widget.weatherCode == 48;
+  bool get _isFog => widget.weatherCode == 45 || widget.weatherCode == 48;
 
-  bool get _isCloudy =>
-      widget.weatherCode == 2 || widget.weatherCode == 3;
+  bool get _isCloudy => widget.weatherCode == 2 || widget.weatherCode == 3;
 
-  bool get _isMostlyClear =>
-      widget.weatherCode == 0 || widget.weatherCode == 1;
+  bool get _isMostlyClear => widget.weatherCode == 0 || widget.weatherCode == 1;
 
   @override
   Widget build(BuildContext context) {
@@ -227,11 +218,7 @@ class _AtmospherePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (!daylight) {
-      _paintNightAtmosphere(canvas, size);
-      return;
-    }
-
+    // Weather condition takes priority over day/night.
     if (fog) {
       _paintFog(canvas, size);
       return;
@@ -242,27 +229,24 @@ class _AtmospherePainter extends CustomPainter {
       return;
     }
 
+    if (mostlyClear && !daylight) {
+      _paintNightAtmosphere(canvas, size);
+      return;
+    }
+
     _paintClearAtmosphere(canvas, size);
   }
 
   void _paintClearAtmosphere(Canvas canvas, Size size) {
     // Soft sun glow in the upper-right portion of the sky.
-    final sunCenter = Offset(
-      size.width * 0.78,
-      size.height * 0.14,
-    );
+    final sunCenter = Offset(size.width * 0.78, size.height * 0.14);
 
     for (int i = 5; i >= 1; i--) {
       final radius = size.width * (0.10 + i * 0.045);
 
       final paint = Paint()
-        ..color = Colors.white.withValues(
-          alpha: 0.012 + (6 - i) * 0.004,
-        )
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          radius * 0.55,
-        );
+        ..color = Colors.white.withValues(alpha: 0.012 + (6 - i) * 0.004)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.55);
 
       canvas.drawCircle(sunCenter, radius, paint);
     }
@@ -270,16 +254,9 @@ class _AtmospherePainter extends CustomPainter {
     // Very subtle sun core.
     final corePaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.055)
-      ..maskFilter = const MaskFilter.blur(
-        BlurStyle.normal,
-        18,
-      );
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
 
-    canvas.drawCircle(
-      sunCenter,
-      size.width * 0.045,
-      corePaint,
-    );
+    canvas.drawCircle(sunCenter, size.width * 0.045, corePaint);
 
     // Barely visible atmospheric particles.
     for (final particle in particles) {
@@ -290,15 +267,9 @@ class _AtmospherePainter extends CustomPainter {
       final y = particle.y * size.height;
 
       final paint = Paint()
-        ..color = Colors.white.withValues(
-          alpha: particle.opacity * 0.45,
-        );
+        ..color = Colors.white.withValues(alpha: particle.opacity * 0.45);
 
-      canvas.drawCircle(
-        Offset(x, y),
-        particle.radius * 0.5,
-        paint,
-      );
+      canvas.drawCircle(Offset(x, y), particle.radius * 0.5, paint);
     }
   }
 
@@ -320,10 +291,7 @@ class _AtmospherePainter extends CustomPainter {
 
       final paint = Paint()
         ..color = Colors.white.withValues(alpha: 0.026)
-        ..maskFilter = const MaskFilter.blur(
-          BlurStyle.normal,
-          32,
-        );
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 32);
 
       canvas.drawOval(rect, paint);
     }
@@ -334,15 +302,10 @@ class _AtmospherePainter extends CustomPainter {
           sin(progress * pi * 2 * particle.speed + particle.phase) * 12;
 
       final paint = Paint()
-        ..color = Colors.white.withValues(
-          alpha: particle.opacity * 0.25,
-        );
+        ..color = Colors.white.withValues(alpha: particle.opacity * 0.25);
 
       canvas.drawCircle(
-        Offset(
-          particle.x * size.width + drift,
-          particle.y * size.height,
-        ),
+        Offset(particle.x * size.width + drift, particle.y * size.height),
         particle.radius * 0.4,
         paint,
       );
@@ -362,10 +325,7 @@ class _AtmospherePainter extends CustomPainter {
 
       final paint = Paint()
         ..color = Colors.white.withValues(alpha: 0.045)
-        ..maskFilter = const MaskFilter.blur(
-          BlurStyle.normal,
-          45,
-        );
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 45);
 
       canvas.drawOval(rect, paint);
     }
@@ -384,34 +344,19 @@ class _AtmospherePainter extends CustomPainter {
       final twinkle =
           0.35 + (sin(progress * pi * 2 * 1.2 + particle.phase) + 1) * 0.32;
 
-      final opacity = min(
-        0.48,
-        particle.opacity * 5.0 * twinkle,
-      );
+      final opacity = min(0.48, particle.opacity * 5.0 * twinkle);
 
-      final paint = Paint()
-        ..color = Colors.white.withValues(alpha: opacity);
+      final paint = Paint()..color = Colors.white.withValues(alpha: opacity);
 
-      canvas.drawCircle(
-        Offset(x, y),
-        particle.radius * 0.65,
-        paint,
-      );
+      canvas.drawCircle(Offset(x, y), particle.radius * 0.65, paint);
 
       // A tiny glow around brighter stars.
       if (twinkle > 0.75) {
         final glowPaint = Paint()
           ..color = Colors.white.withValues(alpha: opacity * 0.16)
-          ..maskFilter = const MaskFilter.blur(
-            BlurStyle.normal,
-            5,
-          );
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
 
-        canvas.drawCircle(
-          Offset(x, y),
-          particle.radius * 1.8,
-          glowPaint,
-        );
+        canvas.drawCircle(Offset(x, y), particle.radius * 1.8, glowPaint);
       }
     }
   }
@@ -426,31 +371,24 @@ class _SnowPainter extends CustomPainter {
   final List<_Snowflake> snowflakes;
   final double progress;
 
-  _SnowPainter({
-    required this.snowflakes,
-    required this.progress,
-  });
+  _SnowPainter({required this.snowflakes, required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final snowflake in snowflakes) {
-      final yProgress =
-          (snowflake.startY + progress * snowflake.speed) % 1.12;
+      final yProgress = (snowflake.startY + progress * snowflake.speed) % 1.12;
 
       final y = yProgress * (size.height + 60) - 30;
 
-      final x = snowflake.x * size.width +
+      final x =
+          snowflake.x * size.width +
           sin(progress * pi * 2 + snowflake.phase) * snowflake.drift;
 
       final paint = Paint()
         ..color = Colors.white.withValues(alpha: snowflake.opacity)
         ..style = PaintingStyle.fill;
 
-      canvas.drawCircle(
-        Offset(x, y),
-        snowflake.radius,
-        paint,
-      );
+      canvas.drawCircle(Offset(x, y), snowflake.radius, paint);
     }
   }
 
@@ -485,11 +423,7 @@ class _RainPainter extends CustomPainter {
         ..strokeWidth = 1.2
         ..strokeCap = StrokeCap.round;
 
-      canvas.drawLine(
-        Offset(x, y),
-        Offset(x - 5, y + drop.length),
-        paint,
-      );
+      canvas.drawLine(Offset(x, y), Offset(x - 5, y + drop.length), paint);
     }
 
     if (storm) {
