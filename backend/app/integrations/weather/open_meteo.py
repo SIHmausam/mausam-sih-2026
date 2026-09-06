@@ -11,6 +11,16 @@ class OpenMeteoWeatherProvider(WeatherProvider):
     def __init__(self) -> None:
         self.base_url = settings.open_meteo_weather_url
 
+        self._forecast_cache: dict[
+            tuple[float, float],
+            dict[str, Any],
+        ] = {}
+
+        self._forecast_tasks: dict[
+            tuple[float, float],
+            asyncio.Task[dict[str, Any]],
+        ] = {}
+
     async def _request(
         self,
         params: dict[str, Any],
@@ -77,27 +87,97 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             "Open-Meteo weather request failed"
         )
 
+    async def _get_forecast_bundle(
+        self,
+        latitude: float,
+        longitude: float,
+    ) -> dict[str, Any]:
+        key = (
+            round(latitude, 6),
+            round(longitude, 6),
+        )
+
+        cached = self._forecast_cache.get(key)
+
+        if cached is not None:
+            return cached
+
+        task = self._forecast_tasks.get(key)
+
+        if task is None:
+            task = asyncio.create_task(
+                self._request(
+                    {
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "current": (
+                            "temperature_2m,"
+                            "relative_humidity_2m,"
+                            "apparent_temperature,"
+                            "precipitation,"
+                            "rain,"
+                            "weather_code,"
+                            "wind_speed_10m,"
+                            "is_day"
+                        ),
+                        "hourly": (
+                            "temperature_2m,"
+                            "relative_humidity_2m,"
+                            "apparent_temperature,"
+                            "precipitation,"
+                            "rain,"
+                            "precipitation_probability,"
+                            "weather_code,"
+                            "wind_speed_10m,"
+                            "visibility,"
+                            "soil_moisture_0_to_7cm,"
+                            "et0_fao_evapotranspiration,"
+                            "vapour_pressure_deficit"
+                        ),
+                        "daily": (
+                            "weather_code,"
+                            "temperature_2m_max,"
+                            "temperature_2m_min,"
+                            "apparent_temperature_max,"
+                            "apparent_temperature_min,"
+                            "sunrise,"
+                            "sunset,"
+                            "precipitation_sum,"
+                            "rain_sum,"
+                            "precipitation_probability_max,"
+                            "wind_speed_10m_max"
+                        ),
+                        "forecast_hours": 72,
+                        "forecast_days": 7,
+                        "timezone": "auto",
+                    }
+                )
+            )
+
+            self._forecast_tasks[key] = task
+
+        try:
+            result = await task
+
+            self._forecast_cache[key] = result
+
+            return result
+
+        finally:
+            if self._forecast_tasks.get(key) is task:
+                self._forecast_tasks.pop(
+                    key,
+                    None,
+                )
+
     async def get_current(
         self,
         latitude: float,
         longitude: float,
     ) -> dict[str, Any]:
-        return await self._request(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "current": (
-                    "temperature_2m,"
-                    "relative_humidity_2m,"
-                    "apparent_temperature,"
-                    "precipitation,"
-                    "rain,"
-                    "weather_code,"
-                    "wind_speed_10m,"
-                    "is_day"
-                ),
-                "timezone": "auto",
-            }
+        return await self._get_forecast_bundle(
+            latitude,
+            longitude,
         )
 
     async def get_hourly(
@@ -105,24 +185,9 @@ class OpenMeteoWeatherProvider(WeatherProvider):
         latitude: float,
         longitude: float,
     ) -> dict[str, Any]:
-        return await self._request(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "hourly": (
-                    "temperature_2m,"
-                    "relative_humidity_2m,"
-                    "apparent_temperature,"
-                    "precipitation,"
-                    "rain,"
-                    "precipitation_probability,"
-                    "weather_code,"
-                    "wind_speed_10m,"
-                    "visibility"
-                ),
-                "forecast_days": 3,
-                "timezone": "auto",
-            }
+        return await self._get_forecast_bundle(
+            latitude,
+            longitude,
         )
 
     async def get_daily(
@@ -130,26 +195,9 @@ class OpenMeteoWeatherProvider(WeatherProvider):
         latitude: float,
         longitude: float,
     ) -> dict[str, Any]:
-        return await self._request(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "daily": (
-                    "weather_code,"
-                    "temperature_2m_max,"
-                    "temperature_2m_min,"
-                    "apparent_temperature_max,"
-                    "apparent_temperature_min,"
-                    "sunrise,"
-                    "sunset,"
-                    "precipitation_sum,"
-                    "rain_sum,"
-                    "precipitation_probability_max,"
-                    "wind_speed_10m_max"
-                ),
-                "forecast_days": 7,
-                "timezone": "auto",
-            }
+        return await self._get_forecast_bundle(
+            latitude,
+            longitude,
         )
 
     async def get_agriculture_context(
@@ -157,16 +205,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
         latitude: float,
         longitude: float,
     ) -> dict[str, Any]:
-        return await self._request(
-            {
-                "latitude": latitude,
-                "longitude": longitude,
-                "hourly": (
-                    "soil_moisture_0_to_7cm,"
-                    "et0_fao_evapotranspiration,"
-                    "vapour_pressure_deficit"
-                ),
-                "forecast_days": 3,
-                "timezone": "auto",
-            }
+        return await self._get_forecast_bundle(
+            latitude,
+            longitude,
         )
