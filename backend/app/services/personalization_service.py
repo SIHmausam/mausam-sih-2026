@@ -146,6 +146,78 @@ class PersonalizationService:
             context=context,
         )
 
+    async def personalize_at_coordinates(
+        self,
+        *,
+        user_id: uuid.UUID,
+        city: str,
+        latitude: float,
+        longitude: float,
+        context: WeatherContextResponse,
+    ) -> PersonalizationResult:
+        preference = await self.preference_repository.get_preference(user_id)
+
+        if preference is None:
+            raise (
+                PersonalizationPreferencesNotFoundError("User preferences not found")
+            )
+
+        if preference.persona is None:
+            raise (PersonalizationPersonaMissingError("User persona is not configured"))
+
+        persona = UserPersonaType(preference.persona)
+
+        if not preference.personalized_homepage_enabled:
+            return PersonalizationResult(
+                location_id="",
+                city=city,
+                persona=persona,
+                source="fallback",
+                cards=build_fallback_ranking(persona),
+            )
+
+        try:
+            ml_request = MLFeatureBuilder.build(
+                user_id=user_id,
+                city=city,
+                persona=persona,
+                context=context,
+            )
+
+            ml_response = await self.personalization_provider.personalize(ml_request)
+
+        except (
+            MLFeatureUnavailableError,
+            PersonalizationProviderError,
+        ):
+            return PersonalizationResult(
+                location_id="",
+                city=city,
+                persona=persona,
+                source="fallback",
+                cards=build_fallback_ranking(persona),
+            )
+
+        cards = [
+            PersonalizedCard(
+                rank=item.rank,
+                card=ML_CARD_REVERSE_MAP[item.card],
+                score=item.score,
+                insight=item.insight,
+            )
+            for item in ml_response.cards
+        ]
+
+        cards.sort(key=lambda item: item.rank)
+
+        return PersonalizationResult(
+            location_id="",
+            city=city,
+            persona=persona,
+            source="ml",
+            cards=cards,
+        )
+
     async def personalize_with_context(
         self,
         *,

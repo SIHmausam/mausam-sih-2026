@@ -4,11 +4,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'models/user_preferences.dart';
+import 'models/personalized_card.dart';
 import 'services/preferences_api_service.dart';
 
 import 'models/weather_data.dart';
 import 'models/user_profile.dart';
 import 'services/mock_weather_service.dart';
+import 'services/personalization_api_service.dart';
 import 'services/card_mapper.dart';
 import 'services/weather_code_mapper.dart';
 import 'services/weather_api_service.dart';
@@ -63,6 +65,7 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _cloudThree;
   final AuthSessionService _authSessionService = AuthSessionService();
   final PreferencesApiService _preferencesApiService = PreferencesApiService();
+  static const bool _devBypassAuth = bool.fromEnvironment('DEV_BYPASS_AUTH');
 
   @override
   void initState() {
@@ -102,6 +105,19 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _restoreSessionAndContinue() async {
+    if (_devBypassAuth) {
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => MainShell(persona: 'Fitness Enthusiast'),
+        ),
+      );
+      return;
+    }
+
     final results = await Future.wait([
       _authSessionService.restoreSession(),
       Future<void>.delayed(const Duration(milliseconds: 2500)),
@@ -3322,8 +3338,7 @@ class _LoginScreenState extends State<LoginScreen> {
   );
   final AuthApiService _authApiService = AuthApiService();
   final TokenStorageService _tokenStorageService = TokenStorageService();
-  final PreferencesApiService _preferencesApiService =
-    PreferencesApiService();
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
   bool _isGoogleSigningIn = false;
   bool _isLoggingIn = false;
@@ -3357,17 +3372,13 @@ class _LoginScreenState extends State<LoginScreen> {
           backgroundColor: const Color(0xFF263B52),
           title: const Text(
             'Verify your email',
-            style: TextStyle(
-              color: Colors.white,
-            ),
+            style: TextStyle(color: Colors.white),
           ),
           content: Text(
             'Your Mausam account has not been verified yet.\n\n'
             'Continue to enter your verification code or request a new one.',
             style: TextStyle(
-              color: Colors.white.withValues(
-                alpha: 0.72,
-              ),
+              color: Colors.white.withValues(alpha: 0.72),
               height: 1.45,
             ),
           ),
@@ -3378,11 +3389,7 @@ class _LoginScreenState extends State<LoginScreen> {
               },
               child: Text(
                 'Cancel',
-                style: TextStyle(
-                  color: Colors.white.withValues(
-                    alpha: 0.65,
-                  ),
-                ),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.65)),
               ),
             ),
             TextButton(
@@ -3408,21 +3415,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
     Navigator.of(context).push(
       _darkRoute(
-        page: EmailVerificationScreen(
-          email: email,
-          password: password,
-        ),
+        page: EmailVerificationScreen(email: email, password: password),
       ),
     );
   }
 
   Future<Widget> _destinationAfterLogin() async {
     try {
-      final preferences =
-          await _preferencesApiService.getPreferences();
+      final preferences = await _preferencesApiService.getPreferences();
 
-      if (preferences.onboardingCompleted &&
-          preferences.persona != null) {
+      if (preferences.onboardingCompleted && preferences.persona != null) {
         final persona = switch (preferences.persona) {
           'farmer' => 'Farmer',
           'traveller' => 'Traveler',
@@ -3430,9 +3432,7 @@ class _LoginScreenState extends State<LoginScreen> {
           _ => 'Fitness Enthusiast',
         };
 
-        return MainShell(
-          persona: persona,
-        );
+        return MainShell(persona: persona);
       }
     } catch (_) {
       // No completed preferences yet:
@@ -3474,55 +3474,41 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final destination =
-        await _destinationAfterLogin();
+      final destination = await _destinationAfterLogin();
 
-    if (!mounted) {
-      return;
-    }
-
-    _showMessage(
-      'Mausam login successful.',
-    );
-
-    Navigator.of(context).pushReplacement(
-      _darkRoute(
-        page: destination,
-      ),
-    );
-    } on AuthApiException catch (error) {
-        if (!mounted) {
-          return;
-        }
-
-        if (error.statusCode == 403 &&
-            error.message == 'Email verification required') {
-          await _handleVerificationRequired(
-            email: email,
-            password: password,
-          );
-
-          return;
-        }
-
-        _showMessage(
-          'Login failed: ${error.message}',
-        );
-      } catch (error) {
-        if (!mounted) {
-          return;
-        }
-
-        _showMessage(
-          'Login failed: $error',
-        );
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoggingIn = false;
-          });
-        }
+      if (!mounted) {
+        return;
       }
+
+      _showMessage('Mausam login successful.');
+
+      Navigator.of(context).pushReplacement(_darkRoute(page: destination));
+    } on AuthApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      if (error.statusCode == 403 &&
+          error.message == 'Email verification required') {
+        await _handleVerificationRequired(email: email, password: password);
+
+        return;
+      }
+
+      _showMessage('Login failed: ${error.message}');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('Login failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoggingIn = false;
+        });
+      }
+    }
   }
 
   void _openSignUp() {
@@ -3559,22 +3545,15 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final destination =
-        await _destinationAfterLogin();
+      final destination = await _destinationAfterLogin();
 
-    if (!mounted) {
-      return;
-    }
+      if (!mounted) {
+        return;
+      }
 
-    _showMessage(
-      'Mausam login successful.',
-    );
+      _showMessage('Mausam login successful.');
 
-    Navigator.of(context).pushReplacement(
-      _darkRoute(
-        page: destination,
-      ),
-    );
+      Navigator.of(context).pushReplacement(_darkRoute(page: destination));
     } catch (error) {
       if (!mounted) {
         return;
@@ -3798,15 +3777,12 @@ class EmailVerificationScreen extends StatefulWidget {
       _EmailVerificationScreenState();
 }
 
-class _EmailVerificationScreenState
-    extends State<EmailVerificationScreen> {
+class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   final _codeController = TextEditingController();
 
-  final AuthApiService _authApiService =
-      AuthApiService();
+  final AuthApiService _authApiService = AuthApiService();
 
-  final TokenStorageService _tokenStorageService =
-      TokenStorageService();
+  final TokenStorageService _tokenStorageService = TokenStorageService();
 
   bool _isVerifying = false;
   bool _isResending = false;
@@ -3822,8 +3798,7 @@ class _EmailVerificationScreenState
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor:
-            const Color(0xFF263B52),
+        backgroundColor: const Color(0xFF263B52),
       ),
     );
   }
@@ -3832,9 +3807,7 @@ class _EmailVerificationScreenState
     final code = _codeController.text.trim();
 
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-      _showMessage(
-        'Enter the 6-digit verification code.',
-      );
+      _showMessage('Enter the 6-digit verification code.');
       return;
     }
 
@@ -3847,10 +3820,7 @@ class _EmailVerificationScreenState
     });
 
     try {
-      await _authApiService.verifyEmail(
-        email: widget.email,
-        code: code,
-      );
+      await _authApiService.verifyEmail(email: widget.email, code: code);
 
       /*
        * Verification itself does not return
@@ -3873,14 +3843,10 @@ class _EmailVerificationScreenState
         return;
       }
 
-      _showMessage(
-        'Email verified successfully.',
-      );
+      _showMessage('Email verified successfully.');
 
       Navigator.of(context).pushAndRemoveUntil(
-        _darkRoute(
-          page: const PersonaSelectionScreen(),
-        ),
+        _darkRoute(page: const PersonaSelectionScreen()),
         (route) => false,
       );
     } catch (error) {
@@ -3888,12 +3854,7 @@ class _EmailVerificationScreenState
         return;
       }
 
-      _showMessage(
-        error.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
-      );
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
         setState(() {
@@ -3913,29 +3874,19 @@ class _EmailVerificationScreenState
     });
 
     try {
-      await _authApiService
-          .resendVerificationCode(
-        email: widget.email,
-      );
+      await _authApiService.resendVerificationCode(email: widget.email);
 
       if (!mounted) {
         return;
       }
 
-      _showMessage(
-        'A new verification code was sent.',
-      );
+      _showMessage('A new verification code was sent.');
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      _showMessage(
-        error.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
-      );
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
         setState(() {
@@ -3948,8 +3899,7 @@ class _EmailVerificationScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          const Color(0xFF101C2C),
+      backgroundColor: const Color(0xFF101C2C),
       resizeToAvoidBottomInset: false,
       body: Stack(
         fit: StackFit.expand,
@@ -3958,23 +3908,14 @@ class _EmailVerificationScreenState
 
           SafeArea(
             child: SingleChildScrollView(
-              padding:
-                  const EdgeInsets.fromLTRB(
-                26,
-                16,
-                26,
-                28,
-              ),
+              padding: const EdgeInsets.fromLTRB(26, 16, 26, 28),
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   IconButton(
-                    onPressed: () =>
-                        Navigator.pop(context),
+                    onPressed: () => Navigator.pop(context),
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(),
+                    constraints: const BoxConstraints(),
                     icon: const Icon(
                       Icons.arrow_back_rounded,
                       color: Colors.white,
@@ -3988,8 +3929,7 @@ class _EmailVerificationScreenState
                     width: 72,
                     height: 72,
                     decoration: BoxDecoration(
-                      color: Colors.white
-                          .withValues(alpha: 0.10),
+                      color: Colors.white.withValues(alpha: 0.10),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -4017,8 +3957,7 @@ class _EmailVerificationScreenState
                     'We sent a 6-digit verification '
                     'code to',
                     style: TextStyle(
-                      color: Colors.white
-                          .withValues(alpha: 0.65),
+                      color: Colors.white.withValues(alpha: 0.65),
                       fontSize: 15,
                       height: 1.5,
                     ),
@@ -4041,20 +3980,15 @@ class _EmailVerificationScreenState
                     label: 'Verification code',
                     hint: 'Enter 6-digit code',
                     controller: _codeController,
-                    keyboardType:
-                        TextInputType.number,
-                    prefixIcon:
-                        Icons.password_rounded,
+                    keyboardType: TextInputType.number,
+                    prefixIcon: Icons.password_rounded,
                   ),
 
                   const SizedBox(height: 28),
 
                   _AuthPrimaryButton(
-                    label: _isVerifying
-                        ? 'Verifying...'
-                        : 'Verify email',
-                    icon:
-                        Icons.check_rounded,
+                    label: _isVerifying ? 'Verifying...' : 'Verify email',
+                    icon: Icons.check_rounded,
                     onPressed: _verify,
                   ),
 
@@ -4064,8 +3998,7 @@ class _EmailVerificationScreenState
                     child: Text(
                       "Didn't receive the code?",
                       style: TextStyle(
-                        color: Colors.white
-                            .withValues(alpha: 0.52),
+                        color: Colors.white.withValues(alpha: 0.52),
                         fontSize: 13,
                       ),
                     ),
@@ -4075,18 +4008,12 @@ class _EmailVerificationScreenState
 
                   Center(
                     child: TextButton(
-                      onPressed:
-                          _isResending
-                              ? null
-                              : _resendCode,
+                      onPressed: _isResending ? null : _resendCode,
                       child: Text(
-                        _isResending
-                            ? 'Sending...'
-                            : 'Resend code',
+                        _isResending ? 'Sending...' : 'Resend code',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontWeight:
-                              FontWeight.w600,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -4106,8 +4033,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  final AuthApiService _authApiService =
-    AuthApiService();
+  final AuthApiService _authApiService = AuthApiService();
 
   bool _isCreatingAccount = false;
 
@@ -4136,19 +4062,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (name.isEmpty ||
-        email.isEmpty ||
-        password.isEmpty) {
-      _showMessage(
-        'Please enter your name, email and password.',
-      );
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+      _showMessage('Please enter your name, email and password.');
       return;
     }
 
     if (password.length < 8) {
-      _showMessage(
-        'Password must be at least 8 characters.',
-      );
+      _showMessage('Password must be at least 8 characters.');
       return;
     }
 
@@ -4173,10 +4093,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       Navigator.of(context).pushReplacement(
         _darkRoute(
-          page: EmailVerificationScreen(
-            email: email,
-            password: password,
-          ),
+          page: EmailVerificationScreen(email: email, password: password),
         ),
       );
     } catch (error) {
@@ -4184,12 +4101,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         return;
       }
 
-      _showMessage(
-        error.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
-      );
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
         setState(() {
@@ -5091,6 +5003,7 @@ class _HomeScreenState extends State<HomeScreen>
   late SelectedLocation _selectedLocationData;
 
   Future<WeatherData>? _weatherFuture;
+  late List<PersonalizedCard> _personalizedCards;
   bool _isRefreshing = false;
   int _refreshVersion = 0;
 
@@ -5204,7 +5117,24 @@ class _HomeScreenState extends State<HomeScreen>
       value: 1.0,
     );
 
+    _personalizedCards = MockWeatherService.getPersonalizedCards(
+      widget.persona,
+    );
+
     _loadWeather();
+    _loadPersonalization();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.persona != widget.persona) {
+      _personalizedCards = MockWeatherService.getPersonalizedCards(
+        widget.persona,
+      );
+      _loadPersonalization();
+    }
   }
 
   @override
@@ -5255,6 +5185,24 @@ class _HomeScreenState extends State<HomeScreen>
 
           return weather;
         });
+  }
+
+  Future<void> _loadPersonalization() async {
+    try {
+      final cards = await PersonalizationApiService.getPersonalizedCards(
+        latitude: _selectedLocationData.latitude,
+        longitude: _selectedLocationData.longitude,
+        city: _selectedLocation,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _personalizedCards = cards;
+      });
+    } catch (_) {
+      // Keep the hardcoded cards as the safe fallback.
+    }
   }
 
   Future<void> _refreshWeather() async {
@@ -5364,9 +5312,7 @@ class _HomeScreenState extends State<HomeScreen>
 
         final weather = snapshot.data!;
 
-        final personalizedCards = MockWeatherService.getPersonalizedCards(
-          widget.persona,
-        );
+        final personalizedCards = _personalizedCards;
 
         final mappedCards = personalizedCards
             .map((card) => CardMapper.map(card, weather))
@@ -7026,7 +6972,7 @@ class _FunctionalNavBar extends StatelessWidget {
               ),
               _FunctionalNavItem(
                 icon: Icons.calendar_today_rounded,
-                label: 'My Day',
+                label: 'Routines',
                 active: currentIndex == 1,
                 onTap: () => onSelected(1),
               ),
@@ -7119,6 +7065,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final UserApiService _userApiService = UserApiService();
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
   UserProfile? _user;
   bool _isLoadingUser = true;
@@ -7148,6 +7095,51 @@ class _ProfilePageState extends State<ProfilePage> {
         _isLoadingUser = false;
         _userError = error.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  bool _isUpdatingPersona = false;
+
+  Future<void> _changePersona(String persona) async {
+    if (_isUpdatingPersona || persona == widget.persona) {
+      return;
+    }
+
+    setState(() {
+      _isUpdatingPersona = true;
+    });
+
+    try {
+      await _preferencesApiService.updatePreferences(
+        persona: switch (persona) {
+          'Farmer' => 'farmer',
+          'Traveler' => 'traveller',
+          'Fitness' => 'health',
+          _ => 'health',
+        },
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      widget.onPersonaChanged(persona);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingPersona = false;
+        });
+      }
     }
   }
 
@@ -7299,11 +7291,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     children: [
                       _PersonaOption(
                         icon: Icons.fitness_center_rounded,
-                        title: 'Fitness',
+                        title: 'Fitness Enthusiast',
                         subtitle:
                             'Health, UV, air quality and outdoor conditions.',
-                        selected: widget.persona == 'Fitness',
-                        onTap: () => widget.onPersonaChanged('Fitness'),
+                        selected: widget.persona == 'Fitness Enthusiast',
+                        onTap: () => _changePersona('Fitness Enthusiast'),
                       ),
                       const SizedBox(height: 10),
                       _PersonaOption(
@@ -7311,7 +7303,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: 'Farmer',
                         subtitle: 'Weather conditions relevant to agricultural activity.',
                         selected: widget.persona == 'Farmer',
-                        onTap: () => widget.onPersonaChanged('Farmer'),
+                        onTap: () => _changePersona('Farmer'),
                       ),
                       const SizedBox(height: 10),
                       _PersonaOption(
@@ -7319,7 +7311,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: 'Traveler',
                         subtitle: 'Travel-friendly weather and environmental information.',
                         selected: widget.persona == 'Traveler',
-                        onTap: () => widget.onPersonaChanged('Traveler'),
+                        onTap: () => _changePersona('Traveler'),
                       ),
                     ],
                   ),
@@ -7570,13 +7562,10 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
-  final AuthSessionService _authSessionService =
-    AuthSessionService();
+  final AuthSessionService _authSessionService = AuthSessionService();
 
-  final GoogleAuthService _googleAuthService =
-      GoogleAuthService(
-    serverClientId:
-        AppConfig.googleServerClientId,
+  final GoogleAuthService _googleAuthService = GoogleAuthService(
+    serverClientId: AppConfig.googleServerClientId,
   );
 
   bool _isSigningOut = false;
@@ -8418,9 +8407,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       Navigator.of(context).pushAndRemoveUntil(
-        _darkRoute(
-          page: const LoginScreen(),
-        ),
+        _darkRoute(page: const LoginScreen()),
         (route) => false,
       );
     } catch (error) {
@@ -8428,13 +8415,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Sign out failed: $error',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Sign out failed: $error')));
     } finally {
       if (mounted) {
         setState(() {

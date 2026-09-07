@@ -67,7 +67,7 @@ class CardMapper {
           indicatorColor: _humidityColor(weather.humidity),
         );
 
-      case 'rain':
+      case 'rainfall':
         return CardDisplayData(
           icon: Icons.water_drop_outlined,
           title: 'Rainfall',

@@ -5,28 +5,21 @@ class AuthSessionService {
   AuthSessionService({
     AuthApiService? authApiService,
     TokenStorageService? tokenStorageService,
-  }) : _authApiService =
-           authApiService ?? AuthApiService(),
-       _tokenStorageService =
-           tokenStorageService ??
-           TokenStorageService();
+  }) : _authApiService = authApiService ?? AuthApiService(),
+       _tokenStorageService = tokenStorageService ?? TokenStorageService();
 
   final AuthApiService _authApiService;
   final TokenStorageService _tokenStorageService;
 
   Future<bool> restoreSession() async {
-    final refreshToken =
-        await _tokenStorageService
-            .getRefreshToken();
+    final refreshToken = await _tokenStorageService.getRefreshToken();
 
-    if (refreshToken == null ||
-        refreshToken.isEmpty) {
+    if (refreshToken == null || refreshToken.isEmpty) {
       return false;
     }
 
     try {
-      final tokens =
-          await _authApiService.refreshSession(
+      final tokens = await _authApiService.refreshSession(
         refreshToken: refreshToken,
       );
 
@@ -43,15 +36,11 @@ class AuthSessionService {
   }
 
   Future<void> logout() async {
-    final refreshToken =
-        await _tokenStorageService.getRefreshToken();
+    final refreshToken = await _tokenStorageService.getRefreshToken();
 
     try {
-      if (refreshToken != null &&
-          refreshToken.isNotEmpty) {
-        await _authApiService.logout(
-          refreshToken: refreshToken,
-        );
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _authApiService.logout(refreshToken: refreshToken);
       }
     } finally {
       await _tokenStorageService.clearTokens();
