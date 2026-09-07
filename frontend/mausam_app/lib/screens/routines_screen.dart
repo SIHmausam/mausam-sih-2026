@@ -205,7 +205,20 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
             onPressed: () async {
               final created = await Navigator.push<bool>(
                 context,
-                MaterialPageRoute(builder: (_) => const RoutineFormScreen()),
+                PageRouteBuilder<bool>(
+                  pageBuilder: (_, animation, secondaryAnimation) =>
+                      const RoutineFormScreen(),
+                  transitionsBuilder:
+                      (_, animation, secondaryAnimation, child) {
+                        return SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(1, 0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        );
+                      },
+                ),
               );
 
               if (created == true && mounted) {
@@ -227,7 +240,7 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _PageHeader(
-              title: 'My Day',
+              title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
               icon: Icons.calendar_today_rounded,
             ),
@@ -248,7 +261,7 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _PageHeader(
-              title: 'My Day',
+              title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
               icon: Icons.calendar_today_rounded,
             ),
@@ -272,7 +285,7 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _PageHeader(
-              title: 'My Day',
+              title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
               icon: Icons.calendar_today_rounded,
             ),
@@ -299,7 +312,7 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
         itemBuilder: (context, index) {
           if (index == 0) {
             return const _PageHeader(
-              title: 'My Day',
+              title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
               icon: Icons.calendar_today_rounded,
             );
@@ -314,12 +327,28 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
             formattedDays: routine.daysOfWeek.map(_formatDay).toList(),
             onToggle: () => _toggleRoutine(routine),
             onDelete: () => _deleteRoutine(routine),
-            onEdit: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Routine editing will be added next.'),
+            onEdit: () async {
+              final updated = await Navigator.push<bool>(
+                context,
+                PageRouteBuilder<bool>(
+                  pageBuilder: (_, animation, secondaryAnimation) =>
+                      RoutineFormScreen(routine: routine),
+                  transitionsBuilder:
+                      (_, animation, secondaryAnimation, child) {
+                        return SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(1, 0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
+                        );
+                      },
                 ),
               );
+
+              if (updated == true && mounted) {
+                await _loadRoutines();
+              }
             },
           );
         },

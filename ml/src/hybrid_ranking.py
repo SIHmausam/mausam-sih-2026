@@ -118,7 +118,8 @@ def get_hybrid_ranking(
     # --------------------------------------------------------
 
     behavior = build_preference_profile(
-        interactions
+        interactions,
+        reference_time=interactions["timestamp"].max(),
     )
 
     interaction_count = len(interactions)

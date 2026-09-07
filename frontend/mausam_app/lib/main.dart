@@ -4,11 +4,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'models/user_preferences.dart';
+import 'models/personalized_card.dart';
 import 'services/preferences_api_service.dart';
 
 import 'models/weather_data.dart';
 import 'models/user_profile.dart';
 import 'services/mock_weather_service.dart';
+import 'services/personalization_api_service.dart';
 import 'services/card_mapper.dart';
 import 'services/weather_code_mapper.dart';
 import 'services/weather_api_service.dart';
@@ -63,6 +65,7 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _cloudThree;
   final AuthSessionService _authSessionService = AuthSessionService();
   final PreferencesApiService _preferencesApiService = PreferencesApiService();
+  static const bool _devBypassAuth = bool.fromEnvironment('DEV_BYPASS_AUTH');
 
   @override
   void initState() {
@@ -102,6 +105,19 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _restoreSessionAndContinue() async {
+    if (_devBypassAuth) {
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => MainShell(persona: 'Fitness Enthusiast'),
+        ),
+      );
+      return;
+    }
+
     final results = await Future.wait([
       _authSessionService.restoreSession(),
       Future<void>.delayed(const Duration(milliseconds: 2500)),
@@ -3322,6 +3338,7 @@ class _LoginScreenState extends State<LoginScreen> {
   );
   final AuthApiService _authApiService = AuthApiService();
   final TokenStorageService _tokenStorageService = TokenStorageService();
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
   bool _isGoogleSigningIn = false;
   bool _isLoggingIn = false;
@@ -3378,8 +3395,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       _showMessage('Mausam login successful.');
 
-      Navigator.of(context)
-          .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
+      await _continueAfterLogin();
     } catch (error) {
       if (!mounted) {
         return;
@@ -3397,6 +3413,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _openSignUp() {
     Navigator.of(context).push(_darkRoute(page: const SignUpScreen()));
+  }
+
+  Future<void> _continueAfterLogin() async {
+    try {
+      final preferences = await _preferencesApiService.getPreferences();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (preferences.onboardingCompleted && preferences.persona != null) {
+        final persona = switch (preferences.persona) {
+          'farmer' => 'Farmer',
+          'traveller' => 'Traveler',
+          'health' => 'Fitness Enthusiast',
+          _ => 'Fitness Enthusiast',
+        };
+
+        Navigator.of(context)
+            .pushReplacement(_darkRoute(page: MainShell(persona: persona)));
+        return;
+      }
+    } catch (_) {
+      // Continue through onboarding if preferences cannot be loaded.
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context)
+        .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
   }
 
   Future<void> _handleGoogleSignIn() async {
@@ -3431,8 +3479,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       _showMessage('Mausam login successful.');
 
-      Navigator.of(context)
-          .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
+      await _continueAfterLogin();
     } catch (error) {
       if (!mounted) {
         return;
@@ -4553,6 +4600,7 @@ class _HomeScreenState extends State<HomeScreen>
   late SelectedLocation _selectedLocationData;
 
   Future<WeatherData>? _weatherFuture;
+  late List<PersonalizedCard> _personalizedCards;
   bool _isRefreshing = false;
   int _refreshVersion = 0;
 
@@ -4666,7 +4714,24 @@ class _HomeScreenState extends State<HomeScreen>
       value: 1.0,
     );
 
+    _personalizedCards = MockWeatherService.getPersonalizedCards(
+      widget.persona,
+    );
+
     _loadWeather();
+    _loadPersonalization();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.persona != widget.persona) {
+      _personalizedCards = MockWeatherService.getPersonalizedCards(
+        widget.persona,
+      );
+      _loadPersonalization();
+    }
   }
 
   @override
@@ -4717,6 +4782,24 @@ class _HomeScreenState extends State<HomeScreen>
 
           return weather;
         });
+  }
+
+  Future<void> _loadPersonalization() async {
+    try {
+      final cards = await PersonalizationApiService.getPersonalizedCards(
+        latitude: _selectedLocationData.latitude,
+        longitude: _selectedLocationData.longitude,
+        city: _selectedLocation,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _personalizedCards = cards;
+      });
+    } catch (_) {
+      // Keep the hardcoded cards as the safe fallback.
+    }
   }
 
   Future<void> _refreshWeather() async {
@@ -4826,9 +4909,7 @@ class _HomeScreenState extends State<HomeScreen>
 
         final weather = snapshot.data!;
 
-        final personalizedCards = MockWeatherService.getPersonalizedCards(
-          widget.persona,
-        );
+        final personalizedCards = _personalizedCards;
 
         final mappedCards = personalizedCards
             .map((card) => CardMapper.map(card, weather))
@@ -6488,7 +6569,7 @@ class _FunctionalNavBar extends StatelessWidget {
               ),
               _FunctionalNavItem(
                 icon: Icons.calendar_today_rounded,
-                label: 'My Day',
+                label: 'Routines',
                 active: currentIndex == 1,
                 onTap: () => onSelected(1),
               ),
@@ -6581,6 +6662,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final UserApiService _userApiService = UserApiService();
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
   UserProfile? _user;
   bool _isLoadingUser = true;
@@ -6610,6 +6692,51 @@ class _ProfilePageState extends State<ProfilePage> {
         _isLoadingUser = false;
         _userError = error.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  bool _isUpdatingPersona = false;
+
+  Future<void> _changePersona(String persona) async {
+    if (_isUpdatingPersona || persona == widget.persona) {
+      return;
+    }
+
+    setState(() {
+      _isUpdatingPersona = true;
+    });
+
+    try {
+      await _preferencesApiService.updatePreferences(
+        persona: switch (persona) {
+          'Farmer' => 'farmer',
+          'Traveler' => 'traveller',
+          'Fitness' => 'health',
+          _ => 'health',
+        },
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      widget.onPersonaChanged(persona);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingPersona = false;
+        });
+      }
     }
   }
 
@@ -6761,11 +6888,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     children: [
                       _PersonaOption(
                         icon: Icons.fitness_center_rounded,
-                        title: 'Fitness',
+                        title: 'Fitness Enthusiast',
                         subtitle:
                             'Health, UV, air quality and outdoor conditions.',
-                        selected: widget.persona == 'Fitness',
-                        onTap: () => widget.onPersonaChanged('Fitness'),
+                        selected: widget.persona == 'Fitness Enthusiast',
+                        onTap: () => _changePersona('Fitness Enthusiast'),
                       ),
                       const SizedBox(height: 10),
                       _PersonaOption(
@@ -6773,7 +6900,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: 'Farmer',
                         subtitle: 'Weather conditions relevant to agricultural activity.',
                         selected: widget.persona == 'Farmer',
-                        onTap: () => widget.onPersonaChanged('Farmer'),
+                        onTap: () => _changePersona('Farmer'),
                       ),
                       const SizedBox(height: 10),
                       _PersonaOption(
@@ -6781,7 +6908,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         title: 'Traveler',
                         subtitle: 'Travel-friendly weather and environmental information.',
                         selected: widget.persona == 'Traveler',
-                        onTap: () => widget.onPersonaChanged('Traveler'),
+                        onTap: () => _changePersona('Traveler'),
                       ),
                     ],
                   ),
@@ -7840,10 +7967,16 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _signOut() {
-    _showInfo(
-      'Sign Out',
-      'Authentication will be connected during the onboarding and login flow.',
+  Future<void> _signOut() async {
+    await TokenStorageService().clearTokens();
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      _darkRoute(page: const LoginScreen()),
+      (route) => false,
     );
   }
 }
