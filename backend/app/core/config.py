@@ -26,6 +26,12 @@ class Settings(BaseSettings):
 
     email_delivery_enabled: bool = False
 
+    email_provider: str = "smtp"
+
+    brevo_api_key: str | None = None
+    brevo_api_url: str = "https://api.brevo.com/v3/smtp/email"
+    brevo_request_timeout_seconds: float = 10.0
+
     password_reset_secret: str
 
     password_reset_code_expire_minutes: int = 15
@@ -71,6 +77,8 @@ class Settings(BaseSettings):
     notification_daily_summary_start_hour: int = 6
 
     notification_daily_summary_end_hour: int = 10
+
+    notification_routine_reminder_lead_minutes: int = 30
 
 
 settings = Settings()

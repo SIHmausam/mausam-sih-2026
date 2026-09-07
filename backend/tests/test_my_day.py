@@ -86,6 +86,7 @@ def make_weather_context():
         hourly=[hourly_item],
         air_quality=air_quality,
         agriculture=agriculture,
+        hourly_air_quality=[],
     )
 
 
@@ -347,3 +348,97 @@ async def test_same_location_context_is_reused():
     assert service.weather_context_service.get_context.await_count == 1
 
     assert service.alert_service.get_relevant_alerts.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_my_day_uses_hourly_aqi_and_uv_for_routine_time():
+    service = build_service()
+
+    routine = make_routine(
+        start_time=time(7, 0),
+    )
+
+    service.routine_repository.list_enabled_for_user.return_value = [routine]
+
+    service.location_repository.get_owned_location.return_value = make_location()
+
+    context = make_weather_context()
+
+    # Current values intentionally differ
+    # from the routine-time values.
+    context.air_quality.aqi = 55.0
+    context.air_quality.uv_index = 2.0
+
+    context.hourly_air_quality = [
+        SimpleNamespace(
+            time=datetime(
+                2026,
+                9,
+                1,
+                7,
+                0,
+                tzinfo=UTC,
+            ),
+            us_aqi=145.0,
+            european_aqi=75.0,
+            uv_index=8.0,
+        )
+    ]
+
+    service.weather_context_service.get_context.return_value = context
+
+    service.alert_service.get_relevant_alerts.return_value = []
+
+    response = await service.get_my_day(
+        user_id=TEST_USER_ID,
+        target_date=date(
+            2026,
+            9,
+            1,
+        ),
+    )
+
+    weather = response.routines[0].weather
+
+    assert weather is not None
+    assert weather.aqi == 145.0
+    assert weather.uv_index == 8.0
+
+
+@pytest.mark.asyncio
+async def test_my_day_falls_back_to_current_aqi_and_uv():
+    service = build_service()
+
+    routine = make_routine(
+        start_time=time(7, 0),
+    )
+
+    service.routine_repository.list_enabled_for_user.return_value = [routine]
+
+    service.location_repository.get_owned_location.return_value = make_location()
+
+    context = make_weather_context()
+
+    context.air_quality.aqi = 55.0
+    context.air_quality.uv_index = 2.0
+
+    context.hourly_air_quality = []
+
+    service.weather_context_service.get_context.return_value = context
+
+    service.alert_service.get_relevant_alerts.return_value = []
+
+    response = await service.get_my_day(
+        user_id=TEST_USER_ID,
+        target_date=date(
+            2026,
+            9,
+            1,
+        ),
+    )
+
+    weather = response.routines[0].weather
+
+    assert weather is not None
+    assert weather.aqi == 55.0
+    assert weather.uv_index == 2.0

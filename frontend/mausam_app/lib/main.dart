@@ -3361,6 +3361,87 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _handleVerificationRequired({
+    required String email,
+    required String password,
+  }) async {
+    final shouldVerify = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF263B52),
+          title: const Text(
+            'Verify your email',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            'Your Mausam account has not been verified yet.\n\n'
+            'Continue to enter your verification code or request a new one.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              height: 1.45,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.65)),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text(
+                'Verify email',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || shouldVerify != true) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      _darkRoute(
+        page: EmailVerificationScreen(email: email, password: password),
+      ),
+    );
+  }
+
+  Future<Widget> _destinationAfterLogin() async {
+    try {
+      final preferences = await _preferencesApiService.getPreferences();
+
+      if (preferences.onboardingCompleted && preferences.persona != null) {
+        final persona = switch (preferences.persona) {
+          'farmer' => 'Farmer',
+          'traveller' => 'Traveler',
+          'health' => 'Fitness Enthusiast',
+          _ => 'Fitness Enthusiast',
+        };
+
+        return MainShell(persona: persona);
+      }
+    } catch (_) {
+      // No completed preferences yet:
+      // continue with first-time onboarding.
+    }
+
+    return const PersonaSelectionScreen();
+  }
+
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -3393,9 +3474,28 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      final destination = await _destinationAfterLogin();
+
+      if (!mounted) {
+        return;
+      }
+
       _showMessage('Mausam login successful.');
 
-      await _continueAfterLogin();
+      Navigator.of(context).pushReplacement(_darkRoute(page: destination));
+    } on AuthApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      if (error.statusCode == 403 &&
+          error.message == 'Email verification required') {
+        await _handleVerificationRequired(email: email, password: password);
+
+        return;
+      }
+
+      _showMessage('Login failed: ${error.message}');
     } catch (error) {
       if (!mounted) {
         return;
@@ -3413,38 +3513,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _openSignUp() {
     Navigator.of(context).push(_darkRoute(page: const SignUpScreen()));
-  }
-
-  Future<void> _continueAfterLogin() async {
-    try {
-      final preferences = await _preferencesApiService.getPreferences();
-
-      if (!mounted) {
-        return;
-      }
-
-      if (preferences.onboardingCompleted && preferences.persona != null) {
-        final persona = switch (preferences.persona) {
-          'farmer' => 'Farmer',
-          'traveller' => 'Traveler',
-          'health' => 'Fitness Enthusiast',
-          _ => 'Fitness Enthusiast',
-        };
-
-        Navigator.of(context)
-            .pushReplacement(_darkRoute(page: MainShell(persona: persona)));
-        return;
-      }
-    } catch (_) {
-      // Continue through onboarding if preferences cannot be loaded.
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    Navigator.of(context)
-        .pushReplacement(_darkRoute(page: const PersonaSelectionScreen()));
   }
 
   Future<void> _handleGoogleSignIn() async {
@@ -3477,9 +3545,15 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      final destination = await _destinationAfterLogin();
+
+      if (!mounted) {
+        return;
+      }
+
       _showMessage('Mausam login successful.');
 
-      await _continueAfterLogin();
+      Navigator.of(context).pushReplacement(_darkRoute(page: destination));
     } catch (error) {
       if (!mounted) {
         return;
@@ -3688,10 +3762,280 @@ class SignUpScreen extends StatefulWidget {
   State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
+class EmailVerificationScreen extends StatefulWidget {
+  final String email;
+  final String password;
+
+  const EmailVerificationScreen({
+    super.key,
+    required this.email,
+    required this.password,
+  });
+
+  @override
+  State<EmailVerificationScreen> createState() =>
+      _EmailVerificationScreenState();
+}
+
+class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
+  final _codeController = TextEditingController();
+
+  final AuthApiService _authApiService = AuthApiService();
+
+  final TokenStorageService _tokenStorageService = TokenStorageService();
+
+  bool _isVerifying = false;
+  bool _isResending = false;
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF263B52),
+      ),
+    );
+  }
+
+  Future<void> _verify() async {
+    final code = _codeController.text.trim();
+
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      _showMessage('Enter the 6-digit verification code.');
+      return;
+    }
+
+    if (_isVerifying) {
+      return;
+    }
+
+    setState(() {
+      _isVerifying = true;
+    });
+
+    try {
+      await _authApiService.verifyEmail(email: widget.email, code: code);
+
+      /*
+       * Verification itself does not return
+       * access/refresh tokens.
+       *
+       * Therefore login immediately after
+       * successful verification.
+       */
+      final tokens = await _authApiService.login(
+        email: widget.email,
+        password: widget.password,
+      );
+
+      await _tokenStorageService.saveTokens(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('Email verified successfully.');
+
+      Navigator.of(context).pushAndRemoveUntil(
+        _darkRoute(page: const PersonaSelectionScreen()),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _resendCode() async {
+    if (_isResending) {
+      return;
+    }
+
+    setState(() {
+      _isResending = true;
+    });
+
+    try {
+      await _authApiService.resendVerificationCode(email: widget.email);
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('A new verification code was sent.');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResending = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF101C2C),
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const _OnboardingBackground(),
+
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(26, 16, 26, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: Colors.white,
+                      size: 25,
+                    ),
+                  ),
+
+                  const SizedBox(height: 42),
+
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.mark_email_read_outlined,
+                      color: Colors.white,
+                      size: 34,
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  const Text(
+                    'Verify your email',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Text(
+                    'We sent a 6-digit verification '
+                    'code to',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    widget.email,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+
+                  const SizedBox(height: 34),
+
+                  _AuthField(
+                    label: 'Verification code',
+                    hint: 'Enter 6-digit code',
+                    controller: _codeController,
+                    keyboardType: TextInputType.number,
+                    prefixIcon: Icons.password_rounded,
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  _AuthPrimaryButton(
+                    label: _isVerifying ? 'Verifying...' : 'Verify email',
+                    icon: Icons.check_rounded,
+                    onPressed: _verify,
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Center(
+                    child: Text(
+                      "Didn't receive the code?",
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.52),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Center(
+                    child: TextButton(
+                      onPressed: _isResending ? null : _resendCode,
+                      child: Text(
+                        _isResending ? 'Sending...' : 'Resend code',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SignUpScreenState extends State<SignUpScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  final AuthApiService _authApiService = AuthApiService();
+
+  bool _isCreatingAccount = false;
 
   bool _obscurePassword = true;
 
@@ -3703,9 +4047,68 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  void _createAccount() {
-    Navigator.of(context)
-        .push(_darkRoute(page: const PersonaSelectionScreen()));
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF263B52),
+      ),
+    );
+  }
+
+  Future<void> _createAccount() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+      _showMessage('Please enter your name, email and password.');
+      return;
+    }
+
+    if (password.length < 8) {
+      _showMessage('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (_isCreatingAccount) {
+      return;
+    }
+
+    setState(() {
+      _isCreatingAccount = true;
+    });
+
+    try {
+      await _authApiService.register(
+        name: name,
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushReplacement(
+        _darkRoute(
+          page: EmailVerificationScreen(email: email, password: password),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreatingAccount = false;
+        });
+      }
+    }
   }
 
   @override
@@ -7159,6 +7562,14 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
+  final AuthSessionService _authSessionService = AuthSessionService();
+
+  final GoogleAuthService _googleAuthService = GoogleAuthService(
+    serverClientId: AppConfig.googleServerClientId,
+  );
+
+  bool _isSigningOut = false;
+
   UserPreferences? _preferences;
   bool _isLoadingPreferences = true;
   bool _isSaving = false;
@@ -7968,16 +8379,51 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _signOut() async {
-    await TokenStorageService().clearTokens();
-
-    if (!mounted) {
+    if (_isSigningOut) {
       return;
     }
 
-    Navigator.of(context).pushAndRemoveUntil(
-      _darkRoute(page: const LoginScreen()),
-      (route) => false,
-    );
+    setState(() {
+      _isSigningOut = true;
+    });
+
+    try {
+      await _authSessionService.logout();
+
+      // This does NOT unlink the Google account.
+      // It only clears Google's local sign-in session
+      // so another account can be selected next time.
+      if (AppConfig.googleServerClientId.isNotEmpty) {
+        try {
+          await _googleAuthService.signOut();
+        } catch (_) {
+          // Mausam logout should still succeed even
+          // if Google SDK sign-out fails.
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushAndRemoveUntil(
+        _darkRoute(page: const LoginScreen()),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Sign out failed: $error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSigningOut = false;
+        });
+      }
+    }
   }
 }
 

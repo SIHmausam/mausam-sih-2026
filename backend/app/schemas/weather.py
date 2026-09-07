@@ -1,8 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.schemas.air_quality import CurrentAirQualityResponse
+from app.schemas.air_quality import (
+    CurrentAirQualityResponse,
+    HourlyAirQualityItem,
+)
 
 
 class CurrentWeatherResponse(BaseModel):
@@ -90,6 +93,9 @@ class WeatherContextResponse(BaseModel):
     latitude: float
     longitude: float
 
+    available: bool = True
+    message: str | None = None
+
     current: CurrentWeatherResponse
     hourly: list[HourlyWeatherItem]
     daily: list[DailyWeatherItem]
@@ -97,3 +103,5 @@ class WeatherContextResponse(BaseModel):
     agriculture: AgricultureContextResponse | None = None
 
     air_quality: CurrentAirQualityResponse | None = None
+
+    hourly_air_quality: list[HourlyAirQualityItem] = Field(default_factory=list)
