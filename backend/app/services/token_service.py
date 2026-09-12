@@ -56,6 +56,13 @@ class TokenService:
 
         return json.loads(raw)
 
+    async def remove_active_refresh_token(
+        self,
+        *,
+        jti: str,
+    ) -> None:
+        await self.redis.delete(f"refresh:active:{jti}")
+
     async def mark_refresh_token_consumed(
         self,
         *,

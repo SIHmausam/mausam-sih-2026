@@ -36,6 +36,7 @@ from app.schemas.auth import (
     TokenResponse,
     VerifyEmailRequest,
 )
+from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
 from app.services.email_verification_service import (
     EmailVerificationService,
@@ -52,7 +53,8 @@ router = APIRouter(
 
 @router.post(
     "/register",
-    # keep your existing response/status definitions
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 async def register(
     payload: RegisterRequest,
