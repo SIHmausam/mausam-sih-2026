@@ -10,6 +10,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     status,
 )
 
@@ -52,15 +53,64 @@ async def get_homepage(
         Depends(get_homepage_service),
     ],
     location_id: uuid.UUID | None = None,
+    latitude: Annotated[
+        float | None,
+        Query(
+            ge=-90,
+            le=90,
+        ),
+    ] = None,
+    longitude: Annotated[
+        float | None,
+        Query(
+            ge=-180,
+            le=180,
+        ),
+    ] = None,
+    city: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=100,
+        ),
+    ] = None,
     target_date: date | None = None,
 ):
-    resolved_date = target_date if target_date is not None else datetime.now(UTC).date()
+    resolved_date = (
+        target_date
+        if target_date is not None
+        else datetime.now(UTC).date()
+    )
+
+    has_latitude = latitude is not None
+    has_longitude = longitude is not None
+
+    if has_latitude != has_longitude:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "latitude and longitude "
+                "must be provided together"
+            ),
+        )
+
+    if location_id is not None and has_latitude:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Use either location_id or "
+                "current coordinates, not both"
+            ),
+        )
 
     try:
         return await service.get_homepage(
             user_id=current_user.id,
             target_date=resolved_date,
             location_id=location_id,
+            latitude=latitude,
+            longitude=longitude,
+            city=city,
         )
 
     except HomepageLocationNotFoundError as exc:

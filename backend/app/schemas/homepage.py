@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -20,7 +21,7 @@ from app.schemas.weather import (
 
 
 class HomepageLocation(BaseModel):
-    id: uuid.UUID
+    id: uuid.UUID | None = None
 
     label: str
     city: str
@@ -28,7 +29,12 @@ class HomepageLocation(BaseModel):
     latitude: float
     longitude: float
 
-    location_type: LocationType
+    location_type: LocationType | None = None
+
+    source: Literal[
+        "saved",
+        "current",
+    ]
 
 
 class HomepageWeatherSummary(BaseModel):

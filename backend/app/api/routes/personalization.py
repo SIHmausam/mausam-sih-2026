@@ -12,9 +12,9 @@ from app.dependencies.providers import (
     get_personalization_provider,
     get_weather_provider,
 )
+from app.integrations.air_quality.base import AirQualityProvider
 from app.integrations.personalization.base import PersonalizationProvider
 from app.integrations.weather.base import WeatherProvider
-from app.integrations.air_quality.base import AirQualityProvider
 from app.models.user import User
 from app.schemas.personalization import PersonalizationResult
 from app.services.air_quality_service import AirQualityService

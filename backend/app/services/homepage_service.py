@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import (
     UTC,
     date,
@@ -8,10 +9,10 @@ from datetime import (
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import LocationType
 from app.integrations.personalization.base import (
     PersonalizationProvider,
 )
-from app.models.saved_location import SavedLocation
 from app.repositories.location_repository import (
     LocationRepository,
 )
@@ -34,6 +35,20 @@ from app.services.weather_context_service import (
     WeatherContextService,
 )
 
+
+@dataclass(slots=True)
+class ResolvedHomepageLocation:
+    id: uuid.UUID | None
+
+    label: str
+    city: str
+
+    latitude: float
+    longitude: float
+
+    location_type: LocationType | None
+
+    source: str
 
 class HomepageLocationNotFoundError(Exception):
     pass
@@ -70,33 +85,74 @@ class HomepageService:
         *,
         user_id: uuid.UUID,
         location_id: uuid.UUID | None,
-    ) -> SavedLocation:
+        latitude: float | None = None,
+        longitude: float | None = None,
+        city: str | None = None,
+    ) -> ResolvedHomepageLocation:
         """
-        Resolve the location used by the homepage.
+        Resolve either the user's current GPS
+        coordinates or a saved location.
 
-        If location_id is supplied, the location must
-        belong to the authenticated user.
-
-        Otherwise, use the user's primary location.
+        Current GPS coordinates are request-scoped
+        and are never written to the database.
         """
+
+        if (
+            latitude is not None
+            and longitude is not None
+        ):
+            resolved_city = (
+                city.strip()
+                if city
+                else "Current Location"
+            )
+
+            return ResolvedHomepageLocation(
+                id=None,
+                label="Current Location",
+                city=resolved_city,
+                latitude=latitude,
+                longitude=longitude,
+                location_type=None,
+                source="current",
+            )
 
         if location_id is not None:
-            location = await self.location_repository.get_owned_location(
-                location_id=location_id,
-                user_id=user_id,
+            location = (
+                await self.location_repository.get_owned_location(
+                    location_id=location_id,
+                    user_id=user_id,
+                )
             )
 
             if location is None:
-                raise HomepageLocationNotFoundError("Saved location not found")
+                raise HomepageLocationNotFoundError(
+                    "Saved location not found"
+                )
 
-            return location
+        else:
+            location = (
+                await self.location_repository.get_primary_for_user(
+                    user_id=user_id,
+                )
+            )
 
-        location = await self.location_repository.get_primary_for_user(user_id=user_id)
+            if location is None:
+                raise HomepageLocationNotFoundError(
+                    "Primary saved location not found"
+                )
 
-        if location is None:
-            raise HomepageLocationNotFoundError("Primary saved location not found")
-
-        return location
+        return ResolvedHomepageLocation(
+            id=location.id,
+            label=location.label,
+            city=location.city,
+            latitude=location.latitude,
+            longitude=location.longitude,
+            location_type=LocationType(
+                location.location_type
+            ),
+            source="saved",
+        )
 
     @staticmethod
     def _normalize_datetime(
@@ -233,6 +289,9 @@ class HomepageService:
         user_id: uuid.UUID,
         target_date: date,
         location_id: uuid.UUID | None = None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        city: str | None = None,
     ) -> HomepageResponse:
         """
         Build the complete personalized homepage.
@@ -256,13 +315,10 @@ class HomepageService:
         location = await self._resolve_location(
             user_id=user_id,
             location_id=location_id,
+            latitude=latitude,
+            longitude=longitude,
+            city=city,
         )
-
-        # -----------------------------------------------------
-        # Phase 1:
-        # Fetch environmental context + official alerts once
-        # for the homepage location.
-        # -----------------------------------------------------
 
         (
             context,
@@ -307,14 +363,24 @@ class HomepageService:
             )
         }
 
-        # -----------------------------------------------------
-        # Phase 2:
-        #
-        # My Day can reuse the already fetched environment.
-        #
-        # ML personalization can also reuse the same
-        # WeatherContext instead of fetching Open-Meteo again.
-        # -----------------------------------------------------
+        if location.source == "current":
+            personalization_request = (
+                self.personalization_service.personalize_at_coordinates(
+                    user_id=user_id,
+                    city=location.city,
+                    latitude=location.latitude,
+                    longitude=location.longitude,
+                    context=context,
+                )
+            )
+        else:
+            personalization_request = (
+                self.personalization_service.personalize_with_context(
+                    user_id=user_id,
+                    location=location,
+                    context=context,
+                )
+            )
 
         (
             my_day,
@@ -323,13 +389,9 @@ class HomepageService:
             self.my_day_service.get_my_day(
                 user_id=user_id,
                 target_date=target_date,
-                context_cache=(environment_cache),
+                context_cache=environment_cache,
             ),
-            self.personalization_service.personalize_with_context(
-                user_id=user_id,
-                location=location,
-                context=context,
-            ),
+            personalization_request,
         )
 
         # -----------------------------------------------------
@@ -390,6 +452,7 @@ class HomepageService:
                 latitude=location.latitude,
                 longitude=location.longitude,
                 location_type=(location.location_type),
+                source=location.source,
             ),
             has_safety_override=(self._has_safety_override(active_alerts)),
             alerts=active_alerts,
