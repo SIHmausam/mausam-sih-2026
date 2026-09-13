@@ -15,6 +15,9 @@ import 'services/card_mapper.dart';
 import 'services/weather_code_mapper.dart';
 import 'services/weather_api_service.dart';
 import 'services/location_search_service.dart';
+import 'services/location_service.dart';
+import 'services/location_api_service.dart';
+import 'models/saved_location.dart';
 import 'services/user_api_service.dart';
 import 'config/app_config.dart';
 import 'services/google_auth_service.dart';
@@ -5121,6 +5124,35 @@ class _HomeScreenState extends State<HomeScreen>
       widget.persona,
     );
 
+    _initializeHome();
+  }
+
+  Future<void> _initializeHome() async {
+    final locationService = LocationService();
+
+    if (await locationService.hasLocationAccess()) {
+      try {
+        final position = await locationService.getCurrentLocation();
+        final locationName = await locationService.getLocationName(position);
+
+        if (!mounted) return;
+
+        _selectedLocation = locationName;
+        _selectedLocationData = SelectedLocation(
+          name: locationName.split(',').first.trim(),
+          displayName: locationName,
+          latitude: position.latitude,
+          longitude: position.longitude,
+        );
+      } catch (_) {
+        // Keep the default location if automatic location detection fails.
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {});
+
     _loadWeather();
     _loadPersonalization();
   }
@@ -5288,12 +5320,17 @@ class _HomeScreenState extends State<HomeScreen>
         _selectedLocation = result.displayName;
         _selectedLocationData = result;
         _loadWeather();
+        _loadPersonalization();
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_weatherFuture == null) {
+      return const _WeatherLoadingView();
+    }
+
     return FutureBuilder<WeatherData>(
       key: ValueKey(_refreshVersion),
       future: _weatherFuture,
@@ -5815,8 +5852,39 @@ class LocationSearchScreen extends StatefulWidget {
 
 class _LocationSearchScreenState extends State<LocationSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final LocationApiService _locationApiService = LocationApiService();
 
-  List<String> get _cities => widget.defaultLocations.keys.toList();
+  List<SavedLocation> _savedLocations = const [];
+  bool _isLoadingSavedLocations = true;
+  String? _savedLocationsError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedLocations();
+  }
+
+  Future<void> _loadSavedLocations() async {
+    try {
+      final locations = await _locationApiService.getLocations();
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedLocations = locations.take(10).toList();
+        _isLoadingSavedLocations = false;
+        _savedLocationsError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _savedLocations = const [];
+        _isLoadingSavedLocations = false;
+        _savedLocationsError = e.toString();
+      });
+    }
+  }
 
   String _query = '';
   Timer? _searchDebounce;
@@ -5833,21 +5901,62 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
     super.dispose();
   }
 
-  List<String> get _filteredCities {
-    if (_query.trim().isEmpty) {
-      return _cities;
-    }
-
-    final query = _query.toLowerCase().trim();
-
-    return _cities.where((city) => city.toLowerCase().contains(query)).toList();
+  bool _isLocationSaved(LocationSearchResult result) {
+    return _savedLocations.any(
+      (location) =>
+          (location.latitude - result.latitude).abs() < 0.0001 &&
+          (location.longitude - result.longitude).abs() < 0.0001,
+    );
   }
 
-  void _selectLocation(String city) {
-    final location = widget.defaultLocations[city];
+  Future<void> _saveLocation(LocationSearchResult result) async {
+    if (_savedLocations.length >= 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can save up to 10 locations.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
-    if (location != null) {
-      Navigator.of(context).pop(location);
+    if (_isLocationSaved(result)) {
+      return;
+    }
+
+    try {
+      final savedLocation = await _locationApiService.createLocation(
+        label: result.name,
+        city: result.displayName,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        locationType: 'other',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedLocations = [
+          ..._savedLocations,
+          savedLocation,
+        ].take(10).toList();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${result.name} saved.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to save ${result.name}.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -5924,6 +6033,218 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
       _isSearching = false;
       _searchError = null;
     });
+  }
+
+  Future<void> _deleteLocation(SavedLocation location) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF18283D),
+          title: const Text(
+            'Delete saved location?',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            'Remove ${location.label} from your saved locations?',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _locationApiService.deleteLocation(location.id);
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedLocations = _savedLocations
+            .where((saved) => saved.id != location.id)
+            .toList();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${location.label} deleted.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to delete ${location.label}.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildSavedLocations() {
+    if (_isLoadingSavedLocations) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Colors.white,
+          strokeWidth: 2.2,
+        ),
+      );
+    }
+
+    if (_savedLocationsError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 30),
+          child: Text(
+            'Unable to load saved locations.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_savedLocations.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 30),
+          child: Text(
+            'No saved locations yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white60,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
+      itemCount: _savedLocations.length,
+      itemBuilder: (context, index) {
+        final location = _savedLocations[index];
+        final selected = location.city == widget.currentLocation;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 9),
+          child: GestureDetector(
+            onTap: () {
+              Navigator.of(context).pop(
+                SelectedLocation(
+                  name: location.city,
+                  displayName: location.city,
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 17,
+                vertical: 16,
+              ),
+              decoration: BoxDecoration(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.10)
+                    : Colors.white.withValues(alpha: 0.045),
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(
+                  color: selected
+                      ? Colors.white.withValues(alpha: 0.20)
+                      : Colors.white.withValues(alpha: 0.07),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_on_outlined,
+                    color: Colors.white.withValues(alpha: 0.72),
+                    size: 21,
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          location.label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          location.city,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (selected)
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.white,
+                      size: 21,
+                    ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    icon: const Icon(
+                      Icons.more_vert_rounded,
+                      color: Colors.white54,
+                      size: 21,
+                    ),
+                    color: const Color(0xFF18283D),
+                    onSelected: (value) {
+                      if (value == 'delete') {
+                        _deleteLocation(location);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildSearchResults() {
@@ -6007,6 +6328,17 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
                       ],
                     ),
                   ),
+                  GestureDetector(
+                    onTap: () => _saveLocation(result),
+                    child: Icon(
+                      _isLocationSaved(result)
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      color: Colors.white,
+                      size: 21,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   const Icon(
                     Icons.chevron_right_rounded,
                     color: Colors.white54,
@@ -6020,15 +6352,46 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
     );
   }
 
-  void _useCurrentLocation() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Current location access will be connected next.'),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF263B52),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-    );
+  Future<void> _useCurrentLocation() async {
+    try {
+      final locationService = LocationService();
+      final position = await locationService.getCurrentLocation();
+      final locationName = await locationService.getLocationName(position);
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop(
+        SelectedLocation(
+          name: locationName.split(',').first.trim(),
+          displayName: locationName,
+          latitude: position.latitude,
+          longitude: position.longitude,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      String message = 'Unable to get your current location.';
+
+      if (e.toString().contains('Location services are disabled')) {
+        message = 'Please turn on location services and try again.';
+      } else if (e.toString().contains('permanently denied')) {
+        message = 'Location permission is disabled. Please enable it in Settings.';
+      } else if (e.toString().contains('permission denied')) {
+        message = 'Location permission was denied.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF263B52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -6182,68 +6545,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
                 Expanded(
                   child: _query.trim().length >= 2
                       ? _buildSearchResults()
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
-                          itemCount: _filteredCities.length,
-                          itemBuilder: (context, index) {
-                            final city = _filteredCities[index];
-                            final selected = city == widget.currentLocation;
-
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 9),
-                              child: GestureDetector(
-                                onTap: () => _selectLocation(city),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 17,
-                                    vertical: 16,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: selected
-                                        ? Colors.white.withValues(alpha: 0.10)
-                                        : Colors.white.withValues(alpha: 0.045),
-                                    borderRadius: BorderRadius.circular(17),
-                                    border: Border.all(
-                                      color: selected
-                                          ? Colors.white.withValues(alpha: 0.20)
-                                          : Colors.white.withValues(
-                                              alpha: 0.07,
-                                            ),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.location_on_outlined,
-                                        color: Colors.white.withValues(
-                                          alpha: 0.72,
-                                        ),
-                                        size: 21,
-                                      ),
-                                      const SizedBox(width: 13),
-                                      Expanded(
-                                        child: Text(
-                                          city,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                      if (selected)
-                                        const Icon(
-                                          Icons.check_circle_rounded,
-                                          color: Colors.white,
-                                          size: 21,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                      : _buildSavedLocations(),
                 ),
               ],
             ),

@@ -82,6 +82,19 @@ class LocationApiService {
     return SavedLocation.fromJson(body);
   }
 
+  Future<void> deleteLocation(String locationId) async {
+    final response = await http
+        .delete(
+          Uri.parse('${AppConfig.apiBaseUrl}/api/v1/locations/$locationId'),
+          headers: await _headers(),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 204) {
+      throw Exception(_errorMessage(response));
+    }
+  }
+
   String _errorMessage(http.Response response) {
     try {
       final body = jsonDecode(response.body);
