@@ -1,15 +1,11 @@
-from typing import Any
+
+from typing import Literal
 
 import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-
 from src.api_response import build_api_response
-from src.interaction_store import save_interaction
-from src.interaction_store import get_user_interactions
-from typing import Literal
-from fastapi import HTTPException
-
+from src.interaction_store import get_user_interactions, save_interaction
 
 # ============================================================
 # FastAPI application

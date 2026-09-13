@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 FILE_PATH = "data/processed/training_data.csv"
 
 df = pd.read_csv(FILE_PATH)
