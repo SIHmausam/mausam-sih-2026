@@ -1,6 +1,5 @@
-import pandas as pd
 import joblib
-
+import pandas as pd
 
 MODEL_FILE = "models/personalization_model.pkl"
 DATA_FILE = "data/processed/test.csv"

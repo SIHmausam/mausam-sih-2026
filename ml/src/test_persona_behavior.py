@@ -1,7 +1,5 @@
 import pandas as pd
-
 from hybrid_ranking import get_hybrid_ranking
-
 
 # ============================================================
 # Load current conditions

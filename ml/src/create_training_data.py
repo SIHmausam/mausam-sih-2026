@@ -1,6 +1,5 @@
-import pandas as pd
 import numpy as np
-
+import pandas as pd
 
 INPUT_FILE = "data/raw/historical_data.csv"
 OUTPUT_FILE = "data/processed/training_data.csv"

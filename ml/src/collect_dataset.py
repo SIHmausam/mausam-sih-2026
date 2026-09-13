@@ -1,7 +1,7 @@
 import os
-import requests
-import pandas as pd
 
+import pandas as pd
+import requests
 
 # ============================================
 # Configuration

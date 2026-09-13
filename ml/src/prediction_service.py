@@ -1,8 +1,8 @@
-import pandas as pd
-import numpy as np
-import joblib
 from pathlib import Path
 
+import joblib
+import numpy as np
+import pandas as pd
 from src.behavioral_preference import build_preference_profile
 from src.card_insights import get_card_insight
 

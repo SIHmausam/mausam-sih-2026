@@ -1,8 +1,6 @@
 import pandas as pd
-
 from behavioral_preference import build_preference_profile
 from hybrid_ranking import get_hybrid_ranking
-
 
 # ============================================================
 # Load weather data

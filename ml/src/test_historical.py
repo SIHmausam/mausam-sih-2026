@@ -1,6 +1,5 @@
-import requests
 import pandas as pd
-
+import requests
 
 LATITUDE = 28.6692
 LONGITUDE = 77.4538
