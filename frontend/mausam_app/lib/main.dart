@@ -26,6 +26,7 @@ import 'services/token_storage_service.dart';
 import 'services/auth_session_service.dart';
 
 import 'screens/routines_screen.dart';
+import 'screens/weather_map_screen.dart';
 
 import 'widgets/priority_card.dart';
 import 'widgets/weather_effects.dart';
@@ -4514,7 +4515,7 @@ class _MainShellState extends State<MainShell> {
       persona: _activePersona,
     ),
     const RoutinesScreen(),
-    const MapComingSoonPage(),
+    const WeatherMapScreen(),
     ProfilePage(persona: _activePersona, onPersonaChanged: _updatePersona),
   ];
 
@@ -9011,131 +9012,6 @@ class _GlassInfoRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class MapComingSoonPage extends StatelessWidget {
-  const MapComingSoonPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF101C2C),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const _OnboardingBackground(),
-          SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 118,
-                      height: 118,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.075),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.12),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            blurRadius: 30,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.map_rounded,
-                        size: 58,
-                        color: Colors.white.withValues(alpha: 0.86),
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    const Text(
-                      'Weather Map',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    Text(
-                      'Explore weather conditions across India, '
-                      'all in one place.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.66),
-                        fontSize: 15,
-                        height: 1.5,
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.12),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.auto_awesome_rounded,
-                            size: 17,
-                            color: Colors.white.withValues(alpha: 0.82),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Coming soon',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    Text(
-                      'Interactive weather maps and live weather layers '
-                      'will be available here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.48),
-                        fontSize: 13,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
