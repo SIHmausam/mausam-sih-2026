@@ -7,12 +7,9 @@ class CurrentAirQualityResponse(BaseModel):
     latitude: float
     longitude: float
 
-    # Normalized AQI used by the application.
     aqi: float | None = None
     aqi_standard: str | None = None
 
-    # Kept because the current ML model
-    # explicitly consumes both.
     us_aqi: float | None = None
     european_aqi: float | None = None
 
@@ -25,6 +22,7 @@ class CurrentAirQualityResponse(BaseModel):
     ozone: float | None = None
 
     uv_index: float | None = None
+    uv_index_clear_sky: float | None = None
 
 
 class HourlyAirQualityItem(BaseModel):
@@ -42,6 +40,7 @@ class HourlyAirQualityItem(BaseModel):
     ozone: float | None = None
 
     uv_index: float | None = None
+    uv_index_clear_sky: float | None = None
 
 
 class HourlyAirQualityResponse(BaseModel):

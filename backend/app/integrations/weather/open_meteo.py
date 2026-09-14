@@ -24,6 +24,8 @@ class OpenMeteoWeatherProvider(WeatherProvider):
     async def _request(
         self,
         params: dict[str, Any],
+        *,
+        base_url: str | None = None,
     ) -> dict[str, Any]:
         max_attempts = 3
 
@@ -33,7 +35,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             for attempt in range(max_attempts):
                 try:
                     response = await client.get(
-                        self.base_url,
+                        base_url or self.base_url,
                         params=params,
                     )
                 except httpx.RequestError:
@@ -79,6 +81,15 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                     await asyncio.sleep(2**attempt)
                     continue
 
+                if response.status_code >= 400:
+                    print(
+                        "Open-Meteo error:",
+                        response.status_code,
+                        response.text,
+                    )
+
+                response.raise_for_status()
+
                 response.raise_for_status()
 
                 return response.json()
@@ -113,24 +124,36 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         "current": (
                             "temperature_2m,"
                             "relative_humidity_2m,"
+                            "dew_point_2m,"
                             "apparent_temperature,"
                             "precipitation,"
                             "rain,"
+                            "showers,"
+                            "precipitation_probability,"
                             "weather_code,"
+                            "cloud_cover,"
                             "wind_speed_10m,"
+                            "wind_direction_10m,"
+                            "wind_gusts_10m,"
+                            "visibility,"
                             "is_day"
                         ),
                         "hourly": (
                             "temperature_2m,"
                             "relative_humidity_2m,"
+                            "dew_point_2m,"
                             "apparent_temperature,"
                             "precipitation,"
                             "rain,"
+                            "showers,"
                             "precipitation_probability,"
                             "weather_code,"
+                            "cloud_cover,"
                             "wind_speed_10m,"
+                            "wind_direction_10m,"
+                            "wind_gusts_10m,"
                             "visibility,"
-                            "soil_moisture_0_to_7cm,"
+
                             "et0_fao_evapotranspiration,"
                             "vapour_pressure_deficit"
                         ),
@@ -144,6 +167,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                             "sunset,"
                             "precipitation_sum,"
                             "rain_sum,"
+                            "precipitation_hours,"
                             "precipitation_probability_max,"
                             "wind_speed_10m_max"
                         ),
@@ -205,7 +229,65 @@ class OpenMeteoWeatherProvider(WeatherProvider):
         latitude: float,
         longitude: float,
     ) -> dict[str, Any]:
-        return await self._get_forecast_bundle(
-            latitude,
-            longitude,
+        # Generic forecast supplies ET0 and VPD.
+        forecast_task = asyncio.create_task(
+            self._get_forecast_bundle(
+                latitude,
+                longitude,
+            )
         )
+
+        # ECMWF supplies the exact soil depth bands used
+        # by the Phase 2 personalization model.
+        soil_task = asyncio.create_task(
+            self._request(
+                {
+                    "latitude": latitude,
+                    "longitude": longitude,
+
+                    # IMPORTANT:
+                    # Pass this as a list, not a
+                    # comma-separated string.
+                    "hourly": [
+                        "soil_moisture_0_to_7cm",
+                        "soil_moisture_7_to_28cm",
+                        "soil_moisture_28_to_100cm",
+                        "soil_moisture_100_to_255cm",
+                        "soil_temperature_0_to_7cm",
+                        "soil_temperature_7_to_28cm",
+                        "soil_temperature_28_to_100cm",
+                        "soil_temperature_100_to_255cm",
+                    ],
+
+                    "forecast_hours": 48,
+                    "timezone": "auto",
+                },
+                base_url=(
+                    settings.open_meteo_ecmwf_url
+                ),
+            )
+        )
+
+        forecast_raw, soil_raw = await asyncio.gather(
+            forecast_task,
+            soil_task,
+        )
+
+        forecast_hourly = forecast_raw.get(
+            "hourly",
+            {},
+        )
+
+        soil_hourly = soil_raw.get(
+            "hourly",
+            {},
+        )
+
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
+            "hourly": {
+                **forecast_hourly,
+                **soil_hourly,
+            },
+        }

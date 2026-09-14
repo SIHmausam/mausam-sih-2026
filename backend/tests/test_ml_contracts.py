@@ -13,8 +13,8 @@ def test_backend_personas_map_to_ml_personas():
 
     assert ML_PERSONA_MAP[UserPersonaType.TRAVELLER] == "traveler"
 
-    assert ML_PERSONA_MAP[UserPersonaType.HEALTH] == "fitness"
+    assert ML_PERSONA_MAP[UserPersonaType.HEALTH] == "health_conscious"
 
 
 def test_backend_rainfall_maps_to_ml_rain():
-    assert ML_CARD_MAP[CardType.RAINFALL] == "rain"
+    assert ML_CARD_MAP[CardType.RAINFALL] == "rain_forecast"

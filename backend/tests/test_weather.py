@@ -367,7 +367,7 @@ async def test_cached_current_weather_skips_provider():
         is_daylight=True,
     )
 
-    cache_key = "weather:current:28.614:77.209"
+    cache_key = "weather:current:v2:28.614:77.209"
 
     redis.storage[cache_key] = cached_response.model_dump_json()
 

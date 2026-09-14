@@ -54,7 +54,7 @@ class AirQualityService:
             longitude,
         )
 
-        cache_key = f"air_quality:current:{coordinates}"
+        cache_key = f"air_quality:current:v2:{coordinates}"
 
         cached = await self.redis.get(cache_key)
 
@@ -99,6 +99,7 @@ class AirQualityService:
             carbon_monoxide=current.get("carbon_monoxide"),
             ozone=current.get("ozone"),
             uv_index=current.get("uv_index"),
+            uv_index_clear_sky=current.get("uv_index_clear_sky"),
         )
 
         await self.redis.set(
@@ -119,7 +120,7 @@ class AirQualityService:
             longitude,
         )
 
-        cache_key = f"air_quality:hourly:{coordinates}"
+        cache_key = f"air_quality:hourly:v2:{coordinates}"
 
         cached = await self.redis.get(cache_key)
 
@@ -181,6 +182,12 @@ class AirQualityService:
                     ),
                     uv_index=self._value_at(
                         hourly.get("uv_index"),
+                        index,
+                    ),
+                    uv_index_clear_sky=self._value_at(
+                        hourly.get(
+                            "uv_index_clear_sky"
+                        ),
                         index,
                     ),
                 )
