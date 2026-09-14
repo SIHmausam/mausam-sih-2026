@@ -32,46 +32,96 @@ from app.services.personalization_service import (
 
 
 def build_context():
+    observed_at = datetime.fromisoformat(
+        "2026-09-01T17:00:00"
+    )
+
     return WeatherContextResponse(
         latitude=28.6139,
         longitude=77.2090,
+
         current=CurrentWeatherResponse(
             latitude=28.6139,
             longitude=77.2090,
-            observed_at=datetime.fromisoformat("2026-09-01T17:00:00"),
+
+            observed_at=observed_at,
+
             temperature=32.0,
             apparent_temperature=35.0,
             humidity=65.0,
+            dew_point=24.0,
+
             precipitation=0.0,
             rain=0.0,
+            showers=0.0,
+            rain_probability=20.0,
+
             weather_code=1,
+            cloud_cover=25.0,
+
             wind_speed=12.0,
+            wind_direction=180.0,
+            wind_gusts=18.0,
+
+            visibility=10000.0,
+
             is_daylight=True,
         ),
+
         hourly=[],
+
         daily=[
             DailyWeatherItem(
                 date="2026-09-01",
-                sunrise=datetime.fromisoformat("2026-09-01T06:00:00"),
-                sunset=datetime.fromisoformat("2026-09-01T18:30:00"),
+
+                sunrise=datetime.fromisoformat(
+                    "2026-09-01T06:00:00"
+                ),
+
+                sunset=datetime.fromisoformat(
+                    "2026-09-01T18:30:00"
+                ),
+
+                precipitation_hours=0.0,
             )
         ],
+
         agriculture=(
             AgricultureContextResponse(
                 latitude=28.6139,
                 longitude=77.2090,
+
                 surface_soil_moisture=0.31,
+
+                soil_moisture_7_to_28cm=0.32,
+                soil_moisture_28_to_100cm=0.35,
+                soil_moisture_100_to_255cm=0.40,
+
+                soil_temperature_0_to_7cm=28.0,
+                soil_temperature_7_to_28cm=27.0,
+                soil_temperature_28_to_100cm=26.0,
+                soil_temperature_100_to_255cm=25.0,
+
+                evapotranspiration=0.15,
+
+                vapour_pressure_deficit=0.8,
             )
         ),
+
         air_quality=(
             CurrentAirQualityResponse(
                 latitude=28.6139,
                 longitude=77.2090,
+
                 us_aqi=82.0,
                 european_aqi=51.0,
+
                 uv_index=6.0,
+                uv_index_clear_sky=7.0,
+
                 pm2_5=23.0,
                 pm10=40.0,
+
                 nitrogen_dioxide=12.0,
                 sulphur_dioxide=5.0,
                 carbon_monoxide=280.0,
@@ -83,27 +133,37 @@ def build_context():
 
 def build_ml_response():
     cards = [
-        "rain",
-        "aqi",
+        "rain_forecast",
+        "air_quality",
         "temperature",
         "humidity",
-        "uv",
+        "uv_allergy",
         "wind",
-        "soil_moisture",
-        "weather_condition",
+        "farm_garden",
+        "weather_conditions",
     ]
 
     return MLPersonalizationResponse(
         city="Delhi",
-        persona="farmer",
+
+        personas=[
+            "farmer"
+        ],
+
         cards=[
             {
                 "rank": index,
                 "card": card,
-                "score": (1.0 - index * 0.05),
-                "insight": "Test insight",
+                "score": (
+                    1.0
+                    - index * 0.05
+                ),
+                "insight": (
+                    "Test insight"
+                ),
             }
-            for index, card in enumerate(
+            for index, card
+            in enumerate(
                 cards,
                 start=1,
             )

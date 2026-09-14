@@ -34,7 +34,7 @@ class HomepageLocation(BaseModel):
     source: Literal[
         "saved",
         "current",
-    ]
+    ] = "saved"
 
 
 class HomepageWeatherSummary(BaseModel):

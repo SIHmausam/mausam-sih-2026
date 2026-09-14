@@ -17,13 +17,20 @@ class CurrentWeatherResponse(BaseModel):
     temperature: float | None = None
     apparent_temperature: float | None = None
     humidity: float | None = None
+    dew_point: float | None = None
 
     precipitation: float | None = None
     rain: float | None = None
+    showers: float | None = None
     rain_probability: float | None = None
 
     weather_code: int | None = None
+    cloud_cover: float | None = None
+
     wind_speed: float | None = None
+    wind_direction: float | None = None
+    wind_gusts: float | None = None
+
     visibility: float | None = None
 
     is_daylight: bool | None = None
@@ -43,6 +50,15 @@ class HourlyWeatherItem(BaseModel):
     weather_code: int | None = None
     wind_speed: float | None = None
     visibility: float | None = None
+
+    dew_point: float | None = None
+
+    showers: float | None = None
+
+    cloud_cover: float | None = None
+
+    wind_direction: float | None = None
+    wind_gusts: float | None = None
 
 
 class HourlyWeatherResponse(BaseModel):
@@ -71,6 +87,7 @@ class DailyWeatherItem(BaseModel):
     rain_probability_max: float | None = None
 
     wind_speed_max: float | None = None
+    precipitation_hours: float | None = None
 
 
 class DailyWeatherResponse(BaseModel):
@@ -85,6 +102,16 @@ class AgricultureContextResponse(BaseModel):
     longitude: float
 
     surface_soil_moisture: float | None = None
+
+    soil_moisture_7_to_28cm: float | None = None
+    soil_moisture_28_to_100cm: float | None = None
+    soil_moisture_100_to_255cm: float | None = None
+
+    soil_temperature_0_to_7cm: float | None = None
+    soil_temperature_7_to_28cm: float | None = None
+    soil_temperature_28_to_100cm: float | None = None
+    soil_temperature_100_to_255cm: float | None = None
+
     evapotranspiration: float | None = None
     vapour_pressure_deficit: float | None = None
 

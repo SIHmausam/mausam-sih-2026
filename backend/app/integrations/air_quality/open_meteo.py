@@ -95,7 +95,8 @@ class OpenMeteoAirQualityProvider(AirQualityProvider):
                     "sulphur_dioxide,"
                     "carbon_monoxide,"
                     "ozone,"
-                    "uv_index"
+                    "uv_index,"
+                    "uv_index_clear_sky"
                 ),
                 "timezone": "auto",
             }
@@ -119,7 +120,8 @@ class OpenMeteoAirQualityProvider(AirQualityProvider):
                     "sulphur_dioxide,"
                     "carbon_monoxide,"
                     "ozone,"
-                    "uv_index"
+                    "uv_index,"
+                    "uv_index_clear_sky"
                 ),
                 "forecast_days": 3,
                 "timezone": "auto",

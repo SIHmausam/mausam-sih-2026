@@ -52,6 +52,10 @@ class Settings(BaseSettings):
 
     open_meteo_weather_url: str = "https://api.open-meteo.com/v1/forecast"
 
+    open_meteo_ecmwf_url: str = (
+        "https://api.open-meteo.com/v1/ecmwf"
+    )
+
     open_meteo_air_quality_url: str = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
     )

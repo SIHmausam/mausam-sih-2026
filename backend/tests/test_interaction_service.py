@@ -143,7 +143,7 @@ async def test_rainfall_maps_to_ml_rain():
 
     ml_request = provider.record_interaction.await_args.args[0]
 
-    assert ml_request.card_id == "rain"
+    assert ml_request.card_id == "rain_forecast"
 
     assert ml_request.action == "click"
 

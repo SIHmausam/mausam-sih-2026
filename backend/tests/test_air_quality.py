@@ -355,7 +355,7 @@ async def test_cached_current_air_quality_skips_provider():
         uv_index=4.0,
     )
 
-    cache_key = "air_quality:current:28.614:77.209"
+    cache_key = "air_quality:current:v2:28.614:77.209"
 
     redis.storage[cache_key] = cached_response.model_dump_json()
 

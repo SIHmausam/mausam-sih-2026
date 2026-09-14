@@ -61,11 +61,14 @@ class MLAPIPersonalizationProvider(PersonalizationProvider):
             )
 
         if response.status_code >= 400:
+            detail = response.text[:1000]
+
             raise (
                 PersonalizationProviderResponseError(
                     "ML personalization request "
                     f"was rejected with "
-                    f"{response.status_code}"
+                    f"{response.status_code}: "
+                    f"{detail}"
                 )
             )
 
@@ -117,8 +120,13 @@ class MLAPIPersonalizationProvider(PersonalizationProvider):
             )
 
         if response.status_code >= 400:
+            detail = response.text[:1000]
+
             raise (
                 PersonalizationProviderResponseError(
-                    f"ML interaction request was rejected with {response.status_code}"
+                    "ML personalization request "
+                    f"was rejected with "
+                    f"{response.status_code}: "
+                    f"{detail}"
                 )
             )

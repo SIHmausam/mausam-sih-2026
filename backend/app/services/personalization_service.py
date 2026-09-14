@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import (
@@ -38,7 +39,7 @@ from app.services.weather_context_service import (
     WeatherContextService,
 )
 
-
+logger = logging.getLogger(__name__)
 class PersonalizationPreferencesNotFoundError(Exception):
     pass
 
@@ -186,10 +187,12 @@ class PersonalizationService:
 
             ml_response = await self.personalization_provider.personalize(ml_request)
 
-        except (
-            MLFeatureUnavailableError,
-            PersonalizationProviderError,
-        ):
+        except MLFeatureUnavailableError as exc:
+            logger.warning(
+                "ML personalization skipped because features are missing: %s",
+                exc.missing_fields,
+            )
+
             return PersonalizationResult(
                 location_id="",
                 city=city,
@@ -198,17 +201,23 @@ class PersonalizationService:
                 cards=build_fallback_ranking(persona),
             )
 
-        cards = [
-            PersonalizedCard(
-                rank=item.rank,
-                card=ML_CARD_REVERSE_MAP[item.card],
-                score=item.score,
-                insight=item.insight,
+        except PersonalizationProviderError as exc:
+            logger.warning(
+                "ML personalization provider failed: %s",
+                exc,
             )
-            for item in ml_response.cards
-        ]
 
-        cards.sort(key=lambda item: item.rank)
+            return PersonalizationResult(
+                location_id="",
+                city=city,
+                persona=persona,
+                source="fallback",
+                cards=build_fallback_ranking(persona),
+            )
+
+        cards = self._translate_ml_cards(
+            ml_response.cards
+        )
 
         return PersonalizationResult(
             location_id="",
@@ -253,10 +262,23 @@ class PersonalizationService:
 
             ml_response = await self.personalization_provider.personalize(ml_request)
 
-        except (
-            MLFeatureUnavailableError,
-            PersonalizationProviderError,
-        ):
+        except MLFeatureUnavailableError as exc:
+            logger.warning(
+                "ML personalization skipped because features are missing: %s",
+                exc.missing_fields,
+            )
+
+            return self._fallback(
+                location=location,
+                persona=persona,
+            )
+
+        except PersonalizationProviderError as exc:
+            logger.warning(
+                "ML personalization provider failed: %s",
+                exc,
+            )
+
             return self._fallback(
                 location=location,
                 persona=persona,
@@ -281,3 +303,52 @@ class PersonalizationService:
             source="ml",
             cards=cards,
         )
+
+    @staticmethod
+    def _translate_ml_cards(
+        ml_cards,
+    ) -> list[PersonalizedCard]:
+        """
+        Convert Phase 2 canonical ML cards into
+        the current Mausam/Flutter card contract.
+
+        Phase 2-only cards that the current frontend
+        does not support yet are intentionally ignored.
+        """
+
+        translated: list[
+            PersonalizedCard
+        ] = []
+
+        for item in sorted(
+            ml_cards,
+            key=lambda value:
+                value.rank,
+        ):
+            backend_card = (
+                ML_CARD_REVERSE_MAP.get(
+                    item.card
+                )
+            )
+
+            if backend_card is None:
+                continue
+
+            translated.append(
+                PersonalizedCard(
+                    # Re-rank after filtering unsupported
+                    # Phase 2-only cards.
+                    rank=(
+                        len(translated)
+                        + 1
+                    ),
+
+                    card=backend_card,
+
+                    score=item.score,
+
+                    insight=item.insight,
+                )
+            )
+
+        return translated
