@@ -9,17 +9,20 @@ from src.prediction_service import get_personalized_ranking
 
 def build_api_response(
     weather_data,
-    persona,
+    personas,
     interactions
 ):
     """
-    Convert the ML ranking into a clean JSON-compatible
-    response for the backend.
+    Convert the Phase 2 ML ranking into a clean
+    JSON-compatible response for the backend.
     """
+
+    if isinstance(personas, str):
+        personas = [personas]
 
     ranking = get_personalized_ranking(
         weather_data,
-        persona,
+        personas,
         interactions
     )
 
@@ -39,7 +42,7 @@ def build_api_response(
 
     response = {
         "city": weather_data["city"],
-        "persona": persona,
+        "personas": personas,
         "cards": cards
     }
 
@@ -47,41 +50,44 @@ def build_api_response(
 
 
 # ============================================================
-# Test
+# Phase 2 test
 # ============================================================
 
 if __name__ == "__main__":
 
     df = pd.read_csv(
-        "data/processed/test.csv"
+        "data/processed/test_phase2.csv"
     )
 
     weather_data = df.iloc[0].copy()
 
-    persona = "farmer"
+    personas = [
+        "farmer",
+        "health_conscious"
+    ]
 
     interactions = pd.DataFrame([
         {
             "user_id": "user_001",
-            "card_id": "soil_moisture",
+            "card_id": "farm_garden",
             "action": "expand",
-            "timestamp": "2026-08-31 09:00:00",
+            "timestamp": "2026-09-13 09:00:00",
             "position": 1,
             "session_id": "session_001"
         },
         {
             "user_id": "user_001",
-            "card_id": "soil_moisture",
+            "card_id": "farm_garden",
             "action": "click",
-            "timestamp": "2026-08-31 09:05:00",
+            "timestamp": "2026-09-13 09:05:00",
             "position": 1,
             "session_id": "session_001"
         },
         {
             "user_id": "user_001",
-            "card_id": "rain",
+            "card_id": "air_quality",
             "action": "expand",
-            "timestamp": "2026-08-31 09:10:00",
+            "timestamp": "2026-09-13 09:10:00",
             "position": 2,
             "session_id": "session_001"
         }
@@ -89,12 +95,12 @@ if __name__ == "__main__":
 
     response = build_api_response(
         weather_data,
-        persona,
+        personas,
         interactions
     )
 
     print("\n================================")
-    print("API RESPONSE")
+    print("PHASE 2 API RESPONSE")
     print("================================")
 
     print(

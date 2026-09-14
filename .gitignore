@@ -16,3 +16,6 @@ venv/
 .env
 .env.*
 !.env.example
+/ml/data/processed/training_data_phase2.csv
+/ml/data/processed/train_phase2.csv
+/ml/data/processed/train_phase2_sample.csv
