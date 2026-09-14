@@ -47,6 +47,12 @@ from app.integrations.weather.base import (
 from app.integrations.weather.open_meteo import (
     OpenMeteoWeatherProvider,
 )
+from app.integrations.weather_maps.base import (
+    WeatherMapProvider,
+)
+from app.integrations.weather_maps.openweather import (
+    OpenWeatherMapProvider,
+)
 from app.services.air_quality_service import (
     AirQualityService,
 )
@@ -58,6 +64,9 @@ from app.services.homepage_service import (
 )
 from app.services.weather_context_service import (
     WeatherContextService,
+)
+from app.services.weather_map_service import (
+    WeatherMapService,
 )
 from app.services.weather_service import (
     WeatherService,
@@ -211,3 +220,61 @@ def get_google_token_verifier() -> GoogleTokenVerifier:
         raise RuntimeError("GOOGLE_WEB_CLIENT_ID is not configured")
 
     return GoogleTokenVerifier(allowed_client_ids=[settings.google_web_client_id])
+
+
+def get_weather_map_provider(
+) -> WeatherMapProvider:
+
+    if not settings.openweather_map_api_key:
+        raise RuntimeError(
+            "OPENWEATHER_MAP_API_KEY "
+            "is not configured"
+        )
+
+    return OpenWeatherMapProvider(
+        api_key=(
+            settings.openweather_map_api_key
+        ),
+        base_url=(
+            settings.openweather_map_tile_url
+        ),
+        timeout_seconds=(
+            settings.openweather_map_timeout_seconds
+        ),
+    )
+
+
+def get_weather_map_service(
+    redis: Annotated[
+        Redis,
+        Depends(get_redis),
+    ],
+    provider: Annotated[
+        WeatherMapProvider,
+        Depends(get_weather_map_provider),
+    ],
+) -> WeatherMapService:
+
+    return WeatherMapService(
+        provider=provider,
+        redis=redis,
+
+        cache_ttl_seconds=(
+            settings
+            .weather_map_tile_cache_ttl_seconds
+        ),
+
+        max_zoom=(
+            settings.weather_map_max_zoom
+        ),
+
+        provider_requests_per_minute=(
+            settings
+            .weather_map_provider_requests_per_minute
+        ),
+
+        user_requests_per_minute=(
+            settings
+            .weather_map_user_requests_per_minute
+        ),
+    )

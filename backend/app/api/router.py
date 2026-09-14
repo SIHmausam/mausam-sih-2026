@@ -26,6 +26,9 @@ from app.api.routes.routines import (
 )
 from app.api.routes.users import router as users_router
 from app.api.routes.weather import router as weather_router
+from app.api.routes.weather_maps import (
+    router as weather_maps_router,
+)
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -33,6 +36,9 @@ api_router.include_router(auth_router)
 api_router.include_router(users_router)
 api_router.include_router(locations_router)
 api_router.include_router(weather_router)
+api_router.include_router(
+    weather_maps_router
+)
 api_router.include_router(air_quality_router)
 api_router.include_router(alerts_router)
 api_router.include_router(routines_router)

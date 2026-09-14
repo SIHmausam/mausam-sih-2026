@@ -55,6 +55,23 @@ class Settings(BaseSettings):
     open_meteo_air_quality_url: str = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
     )
+
+    openweather_map_api_key: str | None = None
+
+    openweather_map_tile_url: str = (
+        "https://tile.openweathermap.org/map"
+    )
+
+    openweather_map_timeout_seconds: float = 10.0
+
+    weather_map_tile_cache_ttl_seconds: int = 600
+
+    weather_map_max_zoom: int = 8
+
+    weather_map_provider_requests_per_minute: int = 45
+
+    weather_map_user_requests_per_minute: int = 180
+    
     sachet_rss_url: str
     sachet_cap_url: str
 

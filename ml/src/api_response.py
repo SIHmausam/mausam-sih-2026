@@ -1,8 +1,7 @@
 import json
+
 import pandas as pd
-
 from src.prediction_service import get_personalized_ranking
-
 
 # ============================================================
 # Build backend-ready response
