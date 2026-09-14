@@ -138,13 +138,21 @@ CITIES = {
     }
 }
 
-START_DATE = "2026-08-25"
-END_DATE = "2026-08-30"
+START_DATE = "2026-06-17"
+END_DATE = "2026-09-13"
 
 WEATHER_URL = "https://archive-api.open-meteo.com/v1/archive"
+HISTORICAL_FORECAST_URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
+MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
 AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 OUTPUT_FILE = "data/raw/historical_data.csv"
+
+MARINE_CITIES = {
+    "Mumbai",
+    "Chennai",
+    "Surat"
+}
 
 
 # ============================================
@@ -160,12 +168,24 @@ def fetch_weather(latitude, longitude):
         "hourly": (
             "temperature_2m,"
             "relative_humidity_2m,"
+            "dew_point_2m,"
             "apparent_temperature,"
             "precipitation,"
             "rain,"
             "weather_code,"
+            "cloud_cover,"
             "wind_speed_10m,"
-            "soil_moisture_0_to_7cm"
+            "wind_direction_10m,"
+            "wind_gusts_10m,"
+            "soil_moisture_0_to_7cm,"
+            "soil_moisture_7_to_28cm,"
+            "soil_moisture_28_to_100cm,"
+            "soil_moisture_100_to_255cm,"
+            "soil_temperature_0_to_7cm,"
+            "soil_temperature_7_to_28cm,"
+            "soil_temperature_28_to_100cm,"
+            "soil_temperature_100_to_255cm,"
+            "et0_fao_evapotranspiration"
         ),
         "daily": "sunrise,sunset",
         "timezone": "Asia/Kolkata"
@@ -173,6 +193,70 @@ def fetch_weather(latitude, longitude):
 
     response = requests.get(
         WEATHER_URL,
+        params=params,
+        timeout=30
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+
+# ============================================
+# Fetch historical forecast features
+# ============================================
+
+def fetch_historical_forecast(latitude, longitude):
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": START_DATE,
+        "end_date": END_DATE,
+        "hourly": (
+            "precipitation_probability,"
+            "showers,"
+            "visibility"
+        ),
+        "timezone": "Asia/Kolkata"
+    }
+
+    response = requests.get(
+        HISTORICAL_FORECAST_URL,
+        params=params,
+        timeout=30
+    )
+
+    response.raise_for_status()
+
+    return response.json()
+
+
+# ============================================
+# Fetch historical marine conditions
+# ============================================
+
+def fetch_marine(latitude, longitude):
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": START_DATE,
+        "end_date": END_DATE,
+        "hourly": (
+            "wave_height,"
+            "wave_direction,"
+            "wave_period,"
+            "swell_wave_height,"
+            "swell_wave_direction,"
+            "swell_wave_period,"
+            "sea_level_height_msl,"
+            "sea_surface_temperature"
+        ),
+        "timezone": "Asia/Kolkata"
+    }
+
+    response = requests.get(
+        MARINE_URL,
         params=params,
         timeout=30
     )
@@ -196,6 +280,7 @@ def fetch_air_quality(latitude, longitude):
             "european_aqi,"
             "us_aqi,"
             "uv_index,"
+            "uv_index_clear_sky,"
             "pm2_5,"
             "pm10,"
             "nitrogen_dioxide,"
@@ -227,6 +312,19 @@ def collect_city_data(city_name, latitude, longitude):
 
     weather_data = fetch_weather(latitude, longitude)
 
+    historical_forecast_data = fetch_historical_forecast(
+        latitude,
+        longitude
+    )
+
+    marine_data = None
+
+    if city_name in MARINE_CITIES:
+        marine_data = fetch_marine(
+            latitude,
+            longitude
+        )
+
     air_quality_data = fetch_air_quality(
         latitude,
         longitude
@@ -249,6 +347,62 @@ def collect_city_data(city_name, latitude, longitude):
     )
 
     # -----------------------------
+    # Derived precipitation hours
+    # -----------------------------
+
+    weather_df["date"] = weather_df["timestamp"].dt.date
+
+    precipitation_hours = (
+        weather_df.assign(
+            precipitation_hour=weather_df["precipitation"] > 0
+        )
+        .groupby("date")["precipitation_hour"]
+        .sum()
+        .rename("precipitation_hours")
+    )
+
+    weather_df = weather_df.merge(
+        precipitation_hours,
+        on="date",
+        how="left"
+    )
+
+    # -----------------------------
+    # Historical Forecast DataFrame
+    # -----------------------------
+
+    historical_forecast_df = pd.DataFrame(
+        historical_forecast_data["hourly"]
+    )
+
+    historical_forecast_df["timestamp"] = pd.to_datetime(
+        historical_forecast_df["time"]
+    )
+
+    historical_forecast_df = historical_forecast_df.drop(
+        columns=["time"]
+    )
+
+    # -----------------------------
+    # Marine DataFrame
+    # -----------------------------
+
+    marine_df = None
+
+    if marine_data is not None:
+        marine_df = pd.DataFrame(
+            marine_data["hourly"]
+        )
+
+        marine_df["timestamp"] = pd.to_datetime(
+            marine_df["time"]
+        )
+
+        marine_df = marine_df.drop(
+            columns=["time"]
+        )
+
+    # -----------------------------
     # Air Quality DataFrame
     # -----------------------------
 
@@ -265,15 +419,64 @@ def collect_city_data(city_name, latitude, longitude):
     )
 
     # -----------------------------
-    # Merge weather + air quality
+    # Merge weather + historical forecast
     # -----------------------------
 
     df = pd.merge(
         weather_df,
+        historical_forecast_df,
+        on="timestamp",
+        how="inner"
+    )
+
+    # -----------------------------
+    # Merge with air quality
+    # -----------------------------
+
+    df = pd.merge(
+        df,
         air_quality_df,
         on="timestamp",
         how="inner"
     )
+
+    # -----------------------------
+    # Merge marine data when available
+    # -----------------------------
+
+    marine_columns = [
+        "wave_height",
+        "wave_direction",
+        "wave_period",
+        "swell_wave_height",
+        "swell_wave_direction",
+        "swell_wave_period",
+        "sea_level_height_msl",
+        "sea_surface_temperature",
+    ]
+
+    if marine_df is not None:
+        df = pd.merge(
+            df,
+            marine_df,
+            on="timestamp",
+            how="left"
+        )
+        core_marine_columns = [
+            "wave_height",
+            "wave_period",
+            "swell_wave_height",
+            "swell_wave_period",
+        ]
+
+        df["marine_data_available"] = (
+            df[core_marine_columns].notna().all(axis=1)
+        )
+    else:
+        for column in marine_columns:
+            df[column] = pd.NA
+
+        df["marine_data_available"] = False
 
     # -----------------------------
     # Add sunrise/sunset
