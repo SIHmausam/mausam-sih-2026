@@ -184,7 +184,7 @@ async def test_homepage_combines_context(
 
     assert response.weather.air_quality.aqi == 80
 
-    assert len(response.personalization.cards) == 8
+    assert len(response.personalization.cards) == len(CardType)
 
     assert response.session_id
 

@@ -30,6 +30,14 @@ ML_CARD_MAP: dict[
     CardType.WIND: "wind",
     CardType.SOIL_MOISTURE: "farm_garden",
     CardType.WEATHER_CONDITION: "weather_conditions",
+
+    CardType.RUNNING_CONDITIONS: "running_conditions",
+    CardType.SURF_CONDITIONS: "surf_conditions",
+    CardType.TIDE_WATER: "tide_water",
+    CardType.COMMUTE_CONDITIONS: "commute_conditions",
+    CardType.TRAVEL_CONDITIONS: "travel_conditions",
+    CardType.FAMILY_SCHOOL: "family_school",
+    CardType.EVENT_CONDITIONS: "event_conditions",
 }
 
 

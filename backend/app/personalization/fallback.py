@@ -10,6 +10,7 @@ FALLBACK_CARD_ORDER: dict[
     UserPersonaType,
     tuple[CardType, ...],
 ] = {
+
     UserPersonaType.HEALTH: (
         CardType.AQI,
         CardType.UV,
@@ -18,27 +19,85 @@ FALLBACK_CARD_ORDER: dict[
         CardType.WEATHER_CONDITION,
         CardType.RAINFALL,
         CardType.WIND,
-        CardType.SOIL_MOISTURE,
     ),
-    UserPersonaType.FARMER: (
-        CardType.RAINFALL,
-        CardType.SOIL_MOISTURE,
-        CardType.HUMIDITY,
+
+    UserPersonaType.FITNESS: (
+        CardType.RUNNING_CONDITIONS,
+        CardType.TEMPERATURE,
+        CardType.AQI,
+        CardType.UV,
         CardType.WEATHER_CONDITION,
+        CardType.RAINFALL,
         CardType.WIND,
+        CardType.HUMIDITY,
+    ),
+
+    UserPersonaType.SURFER: (
+        CardType.SURF_CONDITIONS,
+        CardType.TIDE_WATER,
+        CardType.WIND,
+        CardType.WEATHER_CONDITION,
+        CardType.RAINFALL,
         CardType.TEMPERATURE,
         CardType.UV,
+        CardType.HUMIDITY,
         CardType.AQI,
     ),
+
     UserPersonaType.TRAVELLER: (
+        CardType.TRAVEL_CONDITIONS,
+        CardType.COMMUTE_CONDITIONS,
         CardType.WEATHER_CONDITION,
         CardType.RAINFALL,
         CardType.TEMPERATURE,
         CardType.WIND,
         CardType.AQI,
-        CardType.HUMIDITY,
         CardType.UV,
+        CardType.HUMIDITY,
+    ),
+
+    UserPersonaType.PARENTS_FAMILIES: (
+        CardType.FAMILY_SCHOOL,
+        CardType.COMMUTE_CONDITIONS,
+        CardType.WEATHER_CONDITION,
+        CardType.RAINFALL,
+        CardType.AQI,
+        CardType.TEMPERATURE,
+        CardType.WIND,
+        CardType.UV,
+        CardType.HUMIDITY,
+    ),
+
+    UserPersonaType.FARMER: (
         CardType.SOIL_MOISTURE,
+        CardType.RAINFALL,
+        CardType.HUMIDITY,
+        CardType.WEATHER_CONDITION,
+        CardType.WIND,
+        CardType.TEMPERATURE,
+        CardType.UV,
+    ),
+
+    UserPersonaType.COMMUTER: (
+        CardType.COMMUTE_CONDITIONS,
+        CardType.WEATHER_CONDITION,
+        CardType.RAINFALL,
+        CardType.AQI,
+        CardType.WIND,
+        CardType.TEMPERATURE,
+        CardType.HUMIDITY,
+    ),
+
+    UserPersonaType.EVENT_PLANNER: (
+        CardType.EVENT_CONDITIONS,
+        CardType.COMMUTE_CONDITIONS,
+        CardType.WEATHER_CONDITION,
+        CardType.RAINFALL,
+        CardType.WIND,
+        CardType.TEMPERATURE,
+        CardType.UV,
+        CardType.HUMIDITY,
+        CardType.AQI,
     ),
 }
 

@@ -56,6 +56,14 @@ class CardType(StrEnum):
     SOIL_MOISTURE = "soil_moisture"
     WEATHER_CONDITION = "weather_condition"
 
+    RUNNING_CONDITIONS = "running_conditions"
+    SURF_CONDITIONS = "surf_conditions"
+    TIDE_WATER = "tide_water"
+    COMMUTE_CONDITIONS = "commute_conditions"
+    TRAVEL_CONDITIONS = "travel_conditions"
+    FAMILY_SCHOOL = "family_school"
+    EVENT_CONDITIONS = "event_conditions"
+
 
 class InteractionAction(StrEnum):
     VIEW = "view"

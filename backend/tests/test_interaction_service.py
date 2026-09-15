@@ -321,14 +321,24 @@ def test_position_zero_is_rejected():
         )
 
 
-def test_position_above_eight_is_rejected():
+def test_position_above_fifteen_is_rejected():
     with pytest.raises(ValueError):
         InteractionCreateRequest(
-            card_type="aqi",
-            action="view",
-            position=9,
-            session_id="session-123",
+            card_type=CardType.AQI,
+            action=InteractionAction.CLICK,
+            position=16,
+            session_id="test-session",
         )
+
+def test_position_fifteen_is_accepted():
+    payload = InteractionCreateRequest(
+        card_type=CardType.EVENT_CONDITIONS,
+        action=InteractionAction.CLICK,
+        position=15,
+        session_id="test-session",
+    )
+
+    assert payload.position == 15
 
 
 def test_all_interaction_actions_are_valid():
