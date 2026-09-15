@@ -3,6 +3,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
+from app.core.metrics import CACHE_ACCESS
 from app.integrations.weather.base import WeatherProvider
 from app.schemas.weather import (
     AgricultureContextResponse,
@@ -63,7 +64,22 @@ class WeatherService:
         cached = await self.redis.get(cache_key)
 
         if cached:
-            return CurrentWeatherResponse.model_validate_json(cached)
+            CACHE_ACCESS.labels(
+                cache="weather_current",
+                result="hit",
+            ).inc()
+
+            return (
+                CurrentWeatherResponse
+                .model_validate_json(
+                    cached
+                )
+            )
+
+        CACHE_ACCESS.labels(
+            cache="weather_current",
+            result="miss",
+        ).inc()
 
         raw = await self.provider.get_current(
             latitude,
@@ -213,7 +229,19 @@ class WeatherService:
         cached = await self.redis.get(cache_key)
 
         if cached:
-            return HourlyWeatherResponse.model_validate_json(cached)
+            CACHE_ACCESS.labels(
+                cache="weather_hourly",
+                result="hit",
+            ).inc()
+
+            return HourlyWeatherResponse.model_validate_json(
+                cached
+            )
+
+        CACHE_ACCESS.labels(
+            cache="weather_hourly",
+            result="miss",
+        ).inc()
 
         raw = await self.provider.get_hourly(
             latitude,
@@ -338,7 +366,19 @@ class WeatherService:
         cached = await self.redis.get(cache_key)
 
         if cached:
-            return DailyWeatherResponse.model_validate_json(cached)
+            CACHE_ACCESS.labels(
+                cache="weather_daily",
+                result="hit",
+            ).inc()
+
+            return DailyWeatherResponse.model_validate_json(
+                cached
+            )
+
+        CACHE_ACCESS.labels(
+            cache="weather_daily",
+            result="miss",
+        ).inc()
 
         raw = await self.provider.get_daily(
             latitude,
@@ -444,7 +484,19 @@ class WeatherService:
         cached = await self.redis.get(cache_key)
 
         if cached:
-            return AgricultureContextResponse.model_validate_json(cached)
+            CACHE_ACCESS.labels(
+                cache="weather_agriculture",
+                result="hit",
+            ).inc()
+
+            return AgricultureContextResponse.model_validate_json(
+                cached
+            )
+
+        CACHE_ACCESS.labels(
+            cache="weather_agriculture",
+            result="miss",
+        ).inc()
 
         if reference_time is None:
             current = await self.get_current(

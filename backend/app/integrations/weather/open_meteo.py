@@ -6,6 +6,13 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.metrics import (
+    PROVIDER_FAILURES,
+    PROVIDER_RATE_LIMITS,
+    PROVIDER_REQUEST_DURATION,
+    PROVIDER_REQUESTS,
+    PROVIDER_RETRIES,
+)
 from app.integrations.weather.base import WeatherProvider
 
 logger = logging.getLogger(__name__)
@@ -37,6 +44,13 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             or self.base_url
         )
 
+        provider_name = (
+            "ecmwf"
+            if request_url
+            == settings.open_meteo_ecmwf_url
+            else "weather"
+        )
+
         async with httpx.AsyncClient(
             timeout=15.0,
         ) as client:
@@ -53,10 +67,21 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                     )
 
                 except httpx.RequestError as exc:
-                    elapsed_ms = (
+                    elapsed_seconds = (
                         perf_counter()
                         - started_at
-                    ) * 1000
+                    )
+
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="request_error",
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
 
                     logger.warning(
                         (
@@ -67,23 +92,49 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         attempt,
                         max_attempts,
                         type(exc).__name__,
-                        elapsed_ms,
+                        elapsed_seconds * 1000,
                     )
 
                     if attempt == max_attempts:
+                        PROVIDER_FAILURES.labels(
+                            provider=provider_name,
+                            reason="request_error",
+                        ).inc()
+
                         raise
+
+                    PROVIDER_RETRIES.labels(
+                        provider=provider_name,
+                        reason="request_error",
+                    ).inc()
 
                     await asyncio.sleep(
                         2 ** (attempt - 1)
                     )
+
                     continue
 
-                elapsed_ms = (
+                elapsed_seconds = (
                     perf_counter()
                     - started_at
-                ) * 1000
+                )
 
                 if response.status_code == 429:
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="rate_limited",
+                    ).inc()
+
+                    PROVIDER_RATE_LIMITS.labels(
+                        provider=provider_name,
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
+
                     logger.warning(
                         (
                             "Open-Meteo weather rate limited "
@@ -91,11 +142,21 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         ),
                         attempt,
                         max_attempts,
-                        elapsed_ms,
+                        elapsed_seconds * 1000,
                     )
 
                     if attempt == max_attempts:
+                        PROVIDER_FAILURES.labels(
+                            provider=provider_name,
+                            reason="rate_limited",
+                        ).inc()
+
                         response.raise_for_status()
+
+                    PROVIDER_RETRIES.labels(
+                        provider=provider_name,
+                        reason="rate_limited",
+                    ).inc()
 
                     retry_after = (
                         response.headers.get(
@@ -120,6 +181,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                     await asyncio.sleep(
                         min(delay, 5.0)
                     )
+
                     continue
 
                 if response.status_code in {
@@ -128,6 +190,17 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                     503,
                     504,
                 }:
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="server_error",
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
+
                     logger.warning(
                         (
                             "Open-Meteo weather server error "
@@ -137,18 +210,59 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         response.status_code,
                         attempt,
                         max_attempts,
-                        elapsed_ms,
+                        elapsed_seconds * 1000,
                     )
 
                     if attempt == max_attempts:
+                        PROVIDER_FAILURES.labels(
+                            provider=provider_name,
+                            reason="server_error",
+                        ).inc()
+
                         response.raise_for_status()
+
+                    PROVIDER_RETRIES.labels(
+                        provider=provider_name,
+                        reason="server_error",
+                    ).inc()
 
                     await asyncio.sleep(
                         2 ** (attempt - 1)
                     )
+
                     continue
 
+                if 400 <= response.status_code < 500:
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="client_error",
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
+
+                    PROVIDER_FAILURES.labels(
+                        provider=provider_name,
+                        reason="client_error",
+                    ).inc()
+
+                    response.raise_for_status()
+
                 response.raise_for_status()
+
+                PROVIDER_REQUESTS.labels(
+                    provider=provider_name,
+                    outcome="success",
+                ).inc()
+
+                PROVIDER_REQUEST_DURATION.labels(
+                    provider=provider_name,
+                ).observe(
+                    elapsed_seconds
+                )
 
                 logger.debug(
                     (
@@ -158,7 +272,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                     ),
                     response.status_code,
                     attempt,
-                    elapsed_ms,
+                    elapsed_seconds * 1000,
                 )
 
                 return response.json()

@@ -6,6 +6,13 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.metrics import (
+    PROVIDER_FAILURES,
+    PROVIDER_RATE_LIMITS,
+    PROVIDER_REQUEST_DURATION,
+    PROVIDER_REQUESTS,
+    PROVIDER_RETRIES,
+)
 from app.integrations.marine.base import (
     MarineProvider,
 )
@@ -25,6 +32,7 @@ class OpenMeteoMarineProvider(
         params: dict[str, Any],
     ) -> dict[str, Any]:
         max_attempts = 3
+        provider_name = "marine"
 
         async with httpx.AsyncClient(
             timeout=15.0,
@@ -42,10 +50,21 @@ class OpenMeteoMarineProvider(
                     )
 
                 except httpx.RequestError as exc:
-                    elapsed_ms = (
+                    elapsed_seconds = (
                         perf_counter()
                         - started_at
-                    ) * 1000
+                    )
+
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="request_error",
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
 
                     logger.warning(
                         (
@@ -56,11 +75,21 @@ class OpenMeteoMarineProvider(
                         attempt,
                         max_attempts,
                         type(exc).__name__,
-                        elapsed_ms,
+                        elapsed_seconds * 1000,
                     )
 
                     if attempt == max_attempts:
+                        PROVIDER_FAILURES.labels(
+                            provider=provider_name,
+                            reason="request_error",
+                        ).inc()
+
                         raise
+
+                    PROVIDER_RETRIES.labels(
+                        provider=provider_name,
+                        reason="request_error",
+                    ).inc()
 
                     await asyncio.sleep(
                         2 ** (attempt - 1)
@@ -68,12 +97,27 @@ class OpenMeteoMarineProvider(
 
                     continue
 
-                elapsed_ms = (
+                elapsed_seconds = (
                     perf_counter()
                     - started_at
-                ) * 1000
+                )
 
                 if response.status_code == 429:
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="rate_limited",
+                    ).inc()
+
+                    PROVIDER_RATE_LIMITS.labels(
+                        provider=provider_name,
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
+
                     logger.warning(
                         (
                             "Open-Meteo marine rate limited "
@@ -82,11 +126,21 @@ class OpenMeteoMarineProvider(
                         ),
                         attempt,
                         max_attempts,
-                        elapsed_ms,
+                        elapsed_seconds * 1000,
                     )
 
                     if attempt == max_attempts:
+                        PROVIDER_FAILURES.labels(
+                            provider=provider_name,
+                            reason="rate_limited",
+                        ).inc()
+
                         response.raise_for_status()
+
+                    PROVIDER_RETRIES.labels(
+                        provider=provider_name,
+                        reason="rate_limited",
+                    ).inc()
 
                     retry_after = (
                         response.headers.get(
@@ -119,6 +173,17 @@ class OpenMeteoMarineProvider(
                     503,
                     504,
                 }:
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="server_error",
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
+
                     logger.warning(
                         (
                             "Open-Meteo marine server error "
@@ -128,11 +193,21 @@ class OpenMeteoMarineProvider(
                         response.status_code,
                         attempt,
                         max_attempts,
-                        elapsed_ms,
+                        elapsed_seconds * 1000,
                     )
 
                     if attempt == max_attempts:
+                        PROVIDER_FAILURES.labels(
+                            provider=provider_name,
+                            reason="server_error",
+                        ).inc()
+
                         response.raise_for_status()
+
+                    PROVIDER_RETRIES.labels(
+                        provider=provider_name,
+                        reason="server_error",
+                    ).inc()
 
                     await asyncio.sleep(
                         2 ** (attempt - 1)
@@ -140,7 +215,37 @@ class OpenMeteoMarineProvider(
 
                     continue
 
+                if 400 <= response.status_code < 500:
+                    PROVIDER_REQUESTS.labels(
+                        provider=provider_name,
+                        outcome="client_error",
+                    ).inc()
+
+                    PROVIDER_REQUEST_DURATION.labels(
+                        provider=provider_name,
+                    ).observe(
+                        elapsed_seconds
+                    )
+
+                    PROVIDER_FAILURES.labels(
+                        provider=provider_name,
+                        reason="client_error",
+                    ).inc()
+
+                    response.raise_for_status()
+
                 response.raise_for_status()
+
+                PROVIDER_REQUESTS.labels(
+                    provider=provider_name,
+                    outcome="success",
+                ).inc()
+
+                PROVIDER_REQUEST_DURATION.labels(
+                    provider=provider_name,
+                ).observe(
+                    elapsed_seconds
+                )
 
                 logger.debug(
                     (
@@ -150,7 +255,7 @@ class OpenMeteoMarineProvider(
                     ),
                     response.status_code,
                     attempt,
-                    elapsed_ms,
+                    elapsed_seconds * 1000,
                 )
 
                 return response.json()
