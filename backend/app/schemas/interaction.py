@@ -20,10 +20,10 @@ class InteractionCreateRequest(BaseModel):
 
     # Standardize positions as 1-based:
     # first visible card = 1
-    # last card = 8
+    # last card = 15
     position: int = Field(
         ge=1,
-        le=8,
+        le=15,
     )
 
     session_id: str = Field(
