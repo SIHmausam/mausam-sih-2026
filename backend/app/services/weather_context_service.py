@@ -60,59 +60,147 @@ class WeatherContextService:
         latitude: float,
         longitude: float,
     ) -> WeatherContextResponse:
-        try:
-            (
-                current,
-                hourly,
-                daily,
-                agriculture,
-                air_quality,
-                hourly_air_quality,
-            ) = await asyncio.gather(
-                self.weather_service.get_current(
-                    latitude,
-                    longitude,
-                ),
-                self.weather_service.get_hourly(
-                    latitude,
-                    longitude,
-                ),
-                self.weather_service.get_daily(
-                    latitude,
-                    longitude,
-                ),
-                self.weather_service.get_agriculture_context(
-                    latitude,
-                    longitude,
-                ),
-                self.air_quality_service.get_current(
-                    latitude,
-                    longitude,
-                ),
-                self.air_quality_service.get_hourly(
-                    latitude,
-                    longitude,
-                ),
-
-            )
-
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code != 429:
-                raise
-
-            logger.warning(
-                "Weather provider rate limited request for latitude=%s longitude=%s",
+        (
+            current,
+            hourly,
+            daily,
+            agriculture,
+            air_quality,
+            hourly_air_quality,
+        ) = await asyncio.gather(
+            self.weather_service.get_current(
                 latitude,
                 longitude,
+            ),
+            self.weather_service.get_hourly(
+                latitude,
+                longitude,
+            ),
+            self.weather_service.get_daily(
+                latitude,
+                longitude,
+            ),
+            self.weather_service.get_agriculture_context(
+                latitude,
+                longitude,
+            ),
+            self.air_quality_service.get_current(
+                latitude,
+                longitude,
+            ),
+            self.air_quality_service.get_hourly(
+                latitude,
+                longitude,
+            ),
+            return_exceptions=True,
+        )
+
+        core_results = (
+            ("current", current),
+            ("hourly", hourly),
+            ("daily", daily),
+        )
+
+        for component, result in core_results:
+            if isinstance(
+                result,
+                httpx.HTTPError,
+            ):
+                logger.warning(
+                    (
+                        "Core weather provider failed "
+                        "component=%s latitude=%s "
+                        "longitude=%s error=%s"
+                    ),
+                    component,
+                    latitude,
+                    longitude,
+                    type(result).__name__,
+                )
+
+                return self._unavailable_context(
+                    latitude=latitude,
+                    longitude=longitude,
+                    message=(
+                        "Weather data is temporarily "
+                        "unavailable. Please try again "
+                        "shortly."
+                    ),
+                )
+
+            # Programming/schema errors should not be silently
+            # converted into provider outages.
+            if isinstance(
+                result,
+                Exception,
+            ):
+                raise result
+
+        if isinstance(
+            agriculture,
+            httpx.HTTPError,
+        ):
+            logger.warning(
+                (
+                    "Agriculture provider unavailable "
+                    "latitude=%s longitude=%s error=%s"
+                ),
+                latitude,
+                longitude,
+                type(agriculture).__name__,
             )
 
-            return self._unavailable_context(
-                latitude=latitude,
-                longitude=longitude,
-                message=(
-                    "Weather data is temporarily unavailable. Please try again shortly."
+            agriculture = None
+
+        elif isinstance(
+            agriculture,
+            Exception,
+        ):
+            raise agriculture
+
+        if isinstance(
+            air_quality,
+            httpx.HTTPError,
+        ):
+            logger.warning(
+                (
+                    "Current air-quality provider unavailable "
+                    "latitude=%s longitude=%s error=%s"
                 ),
+                latitude,
+                longitude,
+                type(air_quality).__name__,
             )
+
+            air_quality = None
+
+        elif isinstance(
+            air_quality,
+            Exception,
+        ):
+            raise air_quality
+
+        if isinstance(
+            hourly_air_quality,
+            httpx.HTTPError,
+        ):
+            logger.warning(
+                (
+                    "Hourly air-quality provider unavailable "
+                    "latitude=%s longitude=%s error=%s"
+                ),
+                latitude,
+                longitude,
+                type(hourly_air_quality).__name__,
+            )
+
+            hourly_air_quality = None
+
+        elif isinstance(
+            hourly_air_quality,
+            Exception,
+        ):
+            raise hourly_air_quality
 
         return WeatherContextResponse(
             latitude=latitude,
@@ -124,7 +212,12 @@ class WeatherContextService:
             daily=daily.daily,
             agriculture=agriculture,
             air_quality=air_quality,
-            hourly_air_quality=hourly_air_quality.hourly,
+            hourly_air_quality=(
+                hourly_air_quality.hourly
+                if hourly_air_quality
+                is not None
+                else []
+            ),
         )
 
     async def get_marine_context(

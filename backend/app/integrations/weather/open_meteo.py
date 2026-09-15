@@ -1,4 +1,6 @@
 import asyncio
+import logging
+from time import perf_counter
 from typing import Any
 
 import httpx
@@ -6,6 +8,7 @@ import httpx
 from app.core.config import settings
 from app.integrations.weather.base import WeatherProvider
 
+logger = logging.getLogger(__name__)
 
 class OpenMeteoWeatherProvider(WeatherProvider):
     def __init__(self) -> None:
@@ -29,44 +32,94 @@ class OpenMeteoWeatherProvider(WeatherProvider):
     ) -> dict[str, Any]:
         max_attempts = 3
 
+        request_url = (
+            base_url
+            or self.base_url
+        )
+
         async with httpx.AsyncClient(
             timeout=15.0,
         ) as client:
-            for attempt in range(max_attempts):
+            for attempt in range(
+                1,
+                max_attempts + 1,
+            ):
+                started_at = perf_counter()
+
                 try:
                     response = await client.get(
-                        base_url or self.base_url,
+                        request_url,
                         params=params,
                     )
-                except httpx.RequestError:
-                    if attempt == max_attempts - 1:
+
+                except httpx.RequestError as exc:
+                    elapsed_ms = (
+                        perf_counter()
+                        - started_at
+                    ) * 1000
+
+                    logger.warning(
+                        (
+                            "Open-Meteo weather request failed "
+                            "attempt=%s/%s error=%s "
+                            "duration_ms=%.2f"
+                        ),
+                        attempt,
+                        max_attempts,
+                        type(exc).__name__,
+                        elapsed_ms,
+                    )
+
+                    if attempt == max_attempts:
                         raise
 
-                    await asyncio.sleep(2**attempt)
+                    await asyncio.sleep(
+                        2 ** (attempt - 1)
+                    )
                     continue
 
+                elapsed_ms = (
+                    perf_counter()
+                    - started_at
+                ) * 1000
+
                 if response.status_code == 429:
-                    if attempt == max_attempts - 1:
+                    logger.warning(
+                        (
+                            "Open-Meteo weather rate limited "
+                            "attempt=%s/%s duration_ms=%.2f"
+                        ),
+                        attempt,
+                        max_attempts,
+                        elapsed_ms,
+                    )
+
+                    if attempt == max_attempts:
                         response.raise_for_status()
 
-                    retry_after = response.headers.get(
-                        "Retry-After"
+                    retry_after = (
+                        response.headers.get(
+                            "Retry-After"
+                        )
                     )
 
                     try:
                         delay = (
                             float(retry_after)
-                            if retry_after is not None
-                            else float(2**attempt)
+                            if retry_after
+                            is not None
+                            else float(
+                                2 ** (attempt - 1)
+                            )
                         )
                     except ValueError:
-                        delay = float(2**attempt)
+                        delay = float(
+                            2 ** (attempt - 1)
+                        )
 
-                    # Don't make the user wait forever
-                    # for an external provider.
-                    delay = min(delay, 5.0)
-
-                    await asyncio.sleep(delay)
+                    await asyncio.sleep(
+                        min(delay, 5.0)
+                    )
                     continue
 
                 if response.status_code in {
@@ -75,22 +128,38 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                     503,
                     504,
                 }:
-                    if attempt == max_attempts - 1:
-                        response.raise_for_status()
-
-                    await asyncio.sleep(2**attempt)
-                    continue
-
-                if response.status_code >= 400:
-                    print(
-                        "Open-Meteo error:",
+                    logger.warning(
+                        (
+                            "Open-Meteo weather server error "
+                            "status=%s attempt=%s/%s "
+                            "duration_ms=%.2f"
+                        ),
                         response.status_code,
-                        response.text,
+                        attempt,
+                        max_attempts,
+                        elapsed_ms,
                     )
 
-                response.raise_for_status()
+                    if attempt == max_attempts:
+                        response.raise_for_status()
+
+                    await asyncio.sleep(
+                        2 ** (attempt - 1)
+                    )
+                    continue
 
                 response.raise_for_status()
+
+                logger.debug(
+                    (
+                        "Open-Meteo weather request succeeded "
+                        "status=%s attempt=%s "
+                        "duration_ms=%.2f"
+                    ),
+                    response.status_code,
+                    attempt,
+                    elapsed_ms,
+                )
 
                 return response.json()
 
