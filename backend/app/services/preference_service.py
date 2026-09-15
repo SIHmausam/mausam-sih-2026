@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_activity_preference import UserActivityPreference
+from app.models.user_persona import UserPersona
 from app.models.user_preference import UserPreference
 from app.models.user_weather_interest import UserWeatherInterest
 from app.repositories.preference_repository import PreferenceRepository
@@ -21,6 +22,9 @@ class PreferencesNotFoundError(Exception):
 
 class OnboardingAlreadyCompletedError(Exception):
     """Raised when a user attempts to complete onboarding more than once."""
+
+class InvalidPersonaSelectionError(Exception):
+    """Raised when the selected primary persona is invalid."""
 
 
 class PreferenceService:
@@ -55,7 +59,7 @@ class PreferenceService:
 
         preference.temperature_unit = payload.temperature_unit.value
 
-        preference.persona = payload.persona.value
+        preference.persona = payload.primary_persona.value
 
         preference.preferred_start_hour = payload.preferred_start_hour
 
@@ -83,6 +87,14 @@ class PreferenceService:
 
         preference.onboarding_completed = True
 
+        personas = [
+            UserPersona(
+                user_id=user_id,
+                persona=persona.value,
+            )
+            for persona in payload.personas
+        ]
+
         # Build weather-interest rows
         interests = [
             UserWeatherInterest(
@@ -105,6 +117,11 @@ class PreferenceService:
         try:
             if existing is None:
                 self.repository.add_preference(preference)
+
+            await self.repository.replace_personas(
+                user_id,
+                personas,
+            )
 
             await self.repository.replace_interests(
                 user_id,
@@ -138,31 +155,94 @@ class PreferenceService:
         if preference is None:
             raise PreferencesNotFoundError("User preferences not found")
 
+        persona_rows = await self.repository.get_personas(
+            user_id
+        )
+
         interests = await self.repository.get_interests(user_id)
 
         activities = await self.repository.get_activity_preferences(user_id)
 
+        selected_personas = [
+            item.persona
+            for item in persona_rows
+        ]
+
+        if (
+            not selected_personas
+            and preference.persona is not None
+        ):
+            selected_personas = [
+                preference.persona
+            ]
+
         return PreferencesResponse(
-            preferred_language=(preference.preferred_language),
-            temperature_unit=(preference.temperature_unit),
-            preferred_start_hour=(preference.preferred_start_hour),
-            preferred_end_hour=(preference.preferred_end_hour),
+            preferred_language=(
+                preference.preferred_language
+            ),
+            temperature_unit=(
+                preference.temperature_unit
+            ),
+
+            # Old field kept temporarily for Flutter/
+            # backend compatibility.
             persona=preference.persona,
-            interests=[item.interest for item in interests if item.enabled],
-            activity_contexts=[item.activity_context for item in activities],
+
+            personas=selected_personas,
+
+            primary_persona=preference.persona,
+
+            preferred_start_hour=(
+                preference.preferred_start_hour
+            ),
+            preferred_end_hour=(
+                preference.preferred_end_hour
+            ),
+
+            interests=[
+                item.interest
+                for item in interests
+                if item.enabled
+            ],
+
+            activity_contexts=[
+                item.activity_context
+                for item in activities
+            ],
+
             notifications=NotificationSettings(
-                official_alerts=(preference.official_alerts_enabled),
-                routine_alerts=(preference.routine_alerts_enabled),
-                rain_alerts=(preference.rain_alerts_enabled),
-                aqi_alerts=(preference.aqi_alerts_enabled),
-                daily_summary=(preference.daily_summary_enabled),
+                official_alerts=(
+                    preference.official_alerts_enabled
+                ),
+                routine_alerts=(
+                    preference.routine_alerts_enabled
+                ),
+                rain_alerts=(
+                    preference.rain_alerts_enabled
+                ),
+                aqi_alerts=(
+                    preference.aqi_alerts_enabled
+                ),
+                daily_summary=(
+                    preference.daily_summary_enabled
+                ),
             ),
+
             personalization=PersonalizationSettings(
-                personalized_homepage=(preference.personalized_homepage_enabled),
-                routine_impact=(preference.routine_impact_enabled),
-                learn_from_activity=(preference.learning_enabled),
+                personalized_homepage=(
+                    preference.personalized_homepage_enabled
+                ),
+                routine_impact=(
+                    preference.routine_impact_enabled
+                ),
+                learn_from_activity=(
+                    preference.learning_enabled
+                ),
             ),
-            onboarding_completed=(preference.onboarding_completed),
+
+            onboarding_completed=(
+                preference.onboarding_completed
+            ),
         )
 
     async def update_preferences(
@@ -186,9 +266,6 @@ class PreferenceService:
         fields_set = payload.model_fields_set
 
         try:
-            # --------------------------------
-            # Basic preferences
-            # --------------------------------
 
             if (
                 "preferred_language" in fields_set
@@ -209,10 +286,6 @@ class PreferenceService:
 
             if "preferred_end_hour" in fields_set:
                 preference.preferred_end_hour = payload.preferred_end_hour
-
-            # --------------------------------
-            # Notification preferences
-            # --------------------------------
 
             if payload.notifications is not None:
                 notification_fields = payload.notifications.model_fields_set
@@ -253,10 +326,6 @@ class PreferenceService:
                         payload.notifications.daily_summary
                     )
 
-            # --------------------------------
-            # Personalization preferences
-            # --------------------------------
-
             if payload.personalization is not None:
                 personalization_fields = payload.personalization.model_fields_set
 
@@ -284,16 +353,87 @@ class PreferenceService:
                         payload.personalization.learn_from_activity
                     )
 
-            # --------------------------------
-            # Personas
-            # --------------------------------
+            if (
+                "personas" in fields_set
+                and payload.personas is not None
+            ):
+                selected_values = {
+                    persona.value
+                    for persona in payload.personas
+                }
 
-            if "persona" in fields_set and payload.persona is not None:
-                preference.persona = payload.persona.value
+                if (
+                    "primary_persona" in fields_set
+                    and payload.primary_persona is not None
+                ):
+                    requested_primary = (
+                        payload.primary_persona.value
+                    )
 
-            # --------------------------------
-            # Weather interests
-            # --------------------------------
+                    if requested_primary not in selected_values:
+                        raise InvalidPersonaSelectionError(
+                            "primary_persona must be one "
+                            "of personas"
+                        )
+
+                    preference.persona = requested_primary
+
+                elif preference.persona in selected_values:
+                    pass
+
+                else:
+                    preference.persona = (
+                        payload.personas[0].value
+                    )
+
+                personas = [
+                    UserPersona(
+                        user_id=user_id,
+                        persona=persona.value,
+                    )
+                    for persona in payload.personas
+                ]
+
+                await self.repository.replace_personas(
+                    user_id,
+                    personas,
+                )
+
+            elif (
+                "primary_persona" in fields_set
+                and payload.primary_persona is not None
+            ):
+                persona_rows = (
+                    await self.repository.get_personas(
+                        user_id
+                    )
+                )
+
+                selected_values = {
+                    item.persona
+                    for item in persona_rows
+                }
+
+                # Legacy fallback.
+                if (
+                    not selected_values
+                    and preference.persona is not None
+                ):
+                    selected_values.add(
+                        preference.persona
+                    )
+
+                requested_primary = (
+                    payload.primary_persona.value
+                )
+
+                if requested_primary not in selected_values:
+                    raise InvalidPersonaSelectionError(
+                        "primary_persona must already "
+                        "be one of the selected personas"
+                    )
+
+                preference.persona = requested_primary
 
             if "interests" in fields_set and payload.interests is not None:
                 interests = [
@@ -309,10 +449,6 @@ class PreferenceService:
                     user_id,
                     interests,
                 )
-
-            # --------------------------------
-            # Activity contexts
-            # --------------------------------
 
             if (
                 "activity_contexts" in fields_set

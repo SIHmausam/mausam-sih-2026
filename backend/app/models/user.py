@@ -67,6 +67,12 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    personas = relationship(
+        "UserPersona",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
     weather_interests = relationship(
         "UserWeatherInterest",
         back_populates="user",

@@ -6,6 +6,12 @@ class UserPersonaType(StrEnum):
     TRAVELLER = "traveller"
     HEALTH = "health"
 
+    FITNESS = "fitness"
+    SURFER = "surfer"
+    PARENTS_FAMILIES = "parents_families"
+    COMMUTER = "commuter"
+    EVENT_PLANNER = "event_planner"
+
 
 class TemperatureUnit(StrEnum):
     CELSIUS = "celsius"

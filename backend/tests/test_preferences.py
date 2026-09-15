@@ -20,7 +20,10 @@ def onboarding_payload() -> dict:
     return {
         "preferred_language": "en",
         "temperature_unit": "celsius",
-        "persona": "health",
+        "personas": [
+            "farmer",
+        ],
+        "primary_persona": "farmer",
         "interests": [
             "aqi",
             "uv",
@@ -64,7 +67,9 @@ async def test_user_can_complete_onboarding(
     assert data["preferred_language"] == "en"
     assert data["temperature_unit"] == "celsius"
 
-    assert data["persona"] == "health"
+    assert data["persona"] == "farmer"
+    assert data["primary_persona"] == "farmer"
+    assert data["personas"] == ["farmer"]
 
     assert data["onboarding_completed"] is True
 
@@ -124,12 +129,16 @@ async def test_onboarding_cannot_be_completed_twice(
 
 
 @pytest.mark.asyncio
-async def test_user_has_single_persona(
+async def test_user_can_select_single_persona(
     client: AsyncClient,
 ):
     payload = onboarding_payload()
 
-    payload["persona"] = "farmer"
+    payload["personas"] = [
+        "farmer",
+    ]
+
+    payload["primary_persona"] = "farmer"
 
     response = await client.post(
         "/api/v1/users/onboarding",
@@ -142,6 +151,45 @@ async def test_user_has_single_persona(
 
     assert data["persona"] == "farmer"
 
+    assert data["personas"] == [
+        "farmer",
+    ]
+
+    assert data["primary_persona"] == "farmer"
+
+@pytest.mark.asyncio
+async def test_user_can_select_multiple_personas(
+    client: AsyncClient,
+):
+    payload = onboarding_payload()
+
+    payload["personas"] = [
+        "farmer",
+        "health",
+        "commuter",
+    ]
+
+    payload["primary_persona"] = "farmer"
+
+    response = await client.post(
+        "/api/v1/users/onboarding",
+        json=payload,
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["persona"] == "farmer"
+
+    assert data["primary_persona"] == "farmer"
+
+    assert set(data["personas"]) == {
+        "farmer",
+        "health",
+        "commuter",
+    }
+
 
 @pytest.mark.asyncio
 async def test_invalid_persona_is_rejected(
@@ -149,26 +197,11 @@ async def test_invalid_persona_is_rejected(
 ):
     payload = onboarding_payload()
 
-    payload["persona"] = ["fisherman"]
-
-    response = await client.post(
-        "/api/v1/users/onboarding",
-        json=payload,
-    )
-
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_invalid_weather_interest_is_rejected(
-    client: AsyncClient,
-):
-    payload = onboarding_payload()
-
-    payload["interests"] = [
-        "rainfall",
-        "something_invalid",
+    payload["personas"] = [
+        "fisherman",
     ]
+
+    payload["primary_persona"] = "fisherman"
 
     response = await client.post(
         "/api/v1/users/onboarding",
@@ -248,7 +281,9 @@ async def test_patch_preserves_unrelated_preferences(
 
     assert data["notifications"]["daily_summary"] is True
 
-    assert data["persona"] == "health"
+    assert data["persona"] == "farmer"
+    assert data["primary_persona"] == "farmer"
+    assert data["personas"] == ["farmer"]
 
     assert set(data["interests"]) == {
         "aqi",
@@ -259,7 +294,7 @@ async def test_patch_preserves_unrelated_preferences(
 
 
 @pytest.mark.asyncio
-async def test_patch_can_change_persona(
+async def test_patch_can_replace_personas(
     client: AsyncClient,
 ):
     create_response = await client.post(
@@ -272,7 +307,11 @@ async def test_patch_can_change_persona(
     response = await client.patch(
         "/api/v1/users/preferences",
         json={
-            "persona": "farmer",
+            "personas": [
+                "health",
+                "commuter",
+            ],
+            "primary_persona": "health",
         },
     )
 
@@ -280,7 +319,13 @@ async def test_patch_can_change_persona(
 
     data = response.json()
 
-    assert data["persona"] == "farmer"
+    assert data["persona"] == "health"
+    assert data["primary_persona"] == "health"
+
+    assert set(data["personas"]) == {
+        "health",
+        "commuter",
+    }
 
 
 @pytest.mark.asyncio
@@ -344,6 +389,11 @@ async def test_onboarding_rolls_back_when_write_fails(
         "farmer",
         "traveller",
         "health",
+        "fitness",
+        "surfer",
+        "parents_families",
+        "commuter",
+        "event_planner",
     ],
 )
 @pytest.mark.asyncio
@@ -353,7 +403,11 @@ async def test_supported_personas_are_accepted(
 ):
     payload = onboarding_payload()
 
-    payload["persona"] = persona
+    payload["personas"] = [
+        persona,
+    ]
+
+    payload["primary_persona"] = persona
 
     response = await client.post(
         "/api/v1/users/onboarding",
@@ -362,4 +416,72 @@ async def test_supported_personas_are_accepted(
 
     assert response.status_code == 201
 
-    assert response.json()["persona"] == persona
+    data = response.json()
+
+    assert data["primary_persona"] == persona
+
+    assert data["personas"] == [
+        persona,
+    ]
+
+@pytest.mark.asyncio
+async def test_more_than_three_personas_is_rejected(
+    client: AsyncClient,
+):
+    payload = onboarding_payload()
+
+    payload["personas"] = [
+        "farmer",
+        "health",
+        "commuter",
+        "fitness",
+    ]
+
+    payload["primary_persona"] = "farmer"
+
+    response = await client.post(
+        "/api/v1/users/onboarding",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_duplicate_personas_are_rejected(
+    client: AsyncClient,
+):
+    payload = onboarding_payload()
+
+    payload["personas"] = [
+        "farmer",
+        "farmer",
+    ]
+
+    payload["primary_persona"] = "farmer"
+
+    response = await client.post(
+        "/api/v1/users/onboarding",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_primary_persona_must_be_selected(
+    client: AsyncClient,
+):
+    payload = onboarding_payload()
+
+    payload["personas"] = [
+        "farmer",
+        "health",
+    ]
+
+    payload["primary_persona"] = "commuter"
+
+    response = await client.post(
+        "/api/v1/users/onboarding",
+        json=payload,
+    )
+
+    assert response.status_code == 422

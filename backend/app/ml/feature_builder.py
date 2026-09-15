@@ -62,7 +62,7 @@ class MLFeatureBuilder:
         *,
         user_id: uuid.UUID,
         city: str,
-        persona: UserPersonaType,
+        personas: list[UserPersonaType],
         context: WeatherContextResponse,
     ) -> MLPersonalizationRequest:
         observed_at = (
@@ -516,9 +516,8 @@ class MLFeatureBuilder:
             ),
 
             personas=[
-                ML_PERSONA_MAP[
-                    persona
-                ]
+                ML_PERSONA_MAP[persona]
+                for persona in personas
             ],
 
             weather=weather,

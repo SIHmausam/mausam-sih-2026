@@ -4,6 +4,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_activity_preference import UserActivityPreference
+from app.models.user_persona import UserPersona
 from app.models.user_preference import UserPreference
 from app.models.user_weather_interest import UserWeatherInterest
 
@@ -80,3 +81,29 @@ class PreferenceRepository:
             )
         )
         self.session.add_all(activities)
+
+    async def get_personas(
+        self,
+        user_id: uuid.UUID,
+    ) -> list[UserPersona]:
+        result = await self.session.execute(
+            select(UserPersona).where(
+                UserPersona.user_id == user_id
+            )
+        )
+
+        return list(result.scalars().all())
+
+
+    async def replace_personas(
+        self,
+        user_id: uuid.UUID,
+        personas: list[UserPersona],
+    ) -> None:
+        await self.session.execute(
+            delete(UserPersona).where(
+                UserPersona.user_id == user_id
+            )
+        )
+
+        self.session.add_all(personas)

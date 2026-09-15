@@ -10,6 +10,11 @@ ML_PERSONA_MAP: dict[
     UserPersonaType.FARMER: "farmer",
     UserPersonaType.TRAVELLER: "traveler",
     UserPersonaType.HEALTH: "health_conscious",
+    UserPersonaType.FITNESS: "fitness",
+    UserPersonaType.SURFER: "surfer",
+    UserPersonaType.PARENTS_FAMILIES: "parents_families",
+    UserPersonaType.COMMUTER: "commuter",
+    UserPersonaType.EVENT_PLANNER: "event_planner",
 }
 
 

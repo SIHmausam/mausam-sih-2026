@@ -164,7 +164,9 @@ def test_health_maps_to_health_conscious():
     request = MLFeatureBuilder.build(
         user_id=uuid.uuid4(),
         city="Delhi",
-        persona=UserPersonaType.HEALTH,
+        personas=[
+            UserPersonaType.HEALTH,
+        ],
         context=build_context(),
     )
 
@@ -177,7 +179,9 @@ def test_traveller_maps_to_traveler():
     request = MLFeatureBuilder.build(
         user_id=uuid.uuid4(),
         city="Delhi",
-        persona=UserPersonaType.TRAVELLER,
+        personas=[
+            UserPersonaType.TRAVELLER,
+        ],
         context=build_context(),
     )
 
@@ -185,12 +189,32 @@ def test_traveller_maps_to_traveler():
         "traveler"
     ]
 
+def test_multiple_personas_map_to_ml_values():
+    request = MLFeatureBuilder.build(
+        user_id=uuid.uuid4(),
+        city="Delhi",
+        personas=[
+            UserPersonaType.FARMER,
+            UserPersonaType.HEALTH,
+            UserPersonaType.COMMUTER,
+        ],
+        context=build_context(),
+    )
+
+    assert request.personas == [
+        "farmer",
+        "health_conscious",
+        "commuter",
+    ]
+
 
 def test_weather_context_maps_to_ml_features():
     request = MLFeatureBuilder.build(
         user_id=uuid.uuid4(),
         city="Delhi",
-        persona=UserPersonaType.FARMER,
+        personas=[
+            UserPersonaType.FARMER,
+        ],
         context=build_context(),
     )
 
@@ -290,7 +314,9 @@ def test_missing_required_feature_raises():
         MLFeatureBuilder.build(
             user_id=uuid.uuid4(),
             city="Delhi",
-            persona=UserPersonaType.HEALTH,
+            personas=[
+                UserPersonaType.HEALTH,
+            ],
             context=context,
         )
 
