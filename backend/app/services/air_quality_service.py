@@ -2,6 +2,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
+from app.core.metrics import CACHE_ACCESS
 from app.integrations.air_quality.base import (
     AirQualityProvider,
 )
@@ -59,7 +60,19 @@ class AirQualityService:
         cached = await self.redis.get(cache_key)
 
         if cached:
-            return CurrentAirQualityResponse.model_validate_json(cached)
+            CACHE_ACCESS.labels(
+                cache="air_quality_current",
+                result="hit",
+            ).inc()
+
+            return CurrentAirQualityResponse.model_validate_json(
+                cached
+            )
+
+        CACHE_ACCESS.labels(
+            cache="air_quality_current",
+            result="miss",
+        ).inc()
 
         raw = await self.provider.get_current(
             latitude,
@@ -125,7 +138,19 @@ class AirQualityService:
         cached = await self.redis.get(cache_key)
 
         if cached:
-            return HourlyAirQualityResponse.model_validate_json(cached)
+            CACHE_ACCESS.labels(
+                cache="air_quality_hourly",
+                result="hit",
+            ).inc()
+
+            return HourlyAirQualityResponse.model_validate_json(
+                cached
+            )
+
+        CACHE_ACCESS.labels(
+            cache="air_quality_hourly",
+            result="miss",
+        ).inc()
 
         raw = await self.provider.get_hourly(
             latitude,

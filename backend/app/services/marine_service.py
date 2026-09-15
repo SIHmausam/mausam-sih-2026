@@ -9,6 +9,7 @@ from math import (
 from redis.asyncio import Redis
 
 from app.core.config import settings
+from app.core.metrics import CACHE_ACCESS
 from app.integrations.marine.base import (
     MarineProvider,
 )
@@ -91,12 +92,22 @@ class MarineService:
         )
 
         if cached:
+            CACHE_ACCESS.labels(
+                cache="marine_current",
+                result="hit",
+            ).inc()
+
             return (
                 CurrentMarineResponse
                 .model_validate_json(
                     cached
                 )
             )
+
+        CACHE_ACCESS.labels(
+            cache="marine_current",
+            result="miss",
+        ).inc()
 
         raw = await self.provider.get_current(
             latitude,
