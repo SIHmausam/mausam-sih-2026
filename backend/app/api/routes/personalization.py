@@ -9,15 +9,22 @@ from app.core.redis import get_redis
 from app.dependencies.auth import get_current_user
 from app.dependencies.providers import (
     get_air_quality_provider,
+    get_marine_provider,
     get_personalization_provider,
     get_weather_provider,
 )
 from app.integrations.air_quality.base import AirQualityProvider
+from app.integrations.marine.base import (
+    MarineProvider,
+)
 from app.integrations.personalization.base import PersonalizationProvider
 from app.integrations.weather.base import WeatherProvider
 from app.models.user import User
 from app.schemas.personalization import PersonalizationResult
 from app.services.air_quality_service import AirQualityService
+from app.services.marine_service import (
+    MarineService,
+)
 from app.services.personalization_service import PersonalizationService
 from app.services.weather_context_service import WeatherContextService
 from app.services.weather_service import WeatherService
@@ -62,6 +69,10 @@ async def get_personalization(
         AirQualityProvider,
         Depends(get_air_quality_provider),
     ],
+    marine_provider: Annotated[
+        MarineProvider,
+        Depends(get_marine_provider),
+    ],
     personalization_provider: Annotated[
         PersonalizationProvider,
         Depends(get_personalization_provider),
@@ -77,9 +88,15 @@ async def get_personalization(
         redis=redis,
     )
 
+    marine_service = MarineService(
+        provider=marine_provider,
+        redis=redis,
+    )
+
     weather_context_service = WeatherContextService(
         weather_service=weather_service,
         air_quality_service=air_quality_service,
+        marine_service=marine_service,
     )
 
     context = await weather_context_service.get_context(

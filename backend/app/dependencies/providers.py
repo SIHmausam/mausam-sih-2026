@@ -26,6 +26,12 @@ from app.integrations.email.smtp import SMTPEmailProvider
 from app.integrations.google_auth import (
     GoogleTokenVerifier,
 )
+from app.integrations.marine.base import (
+    MarineProvider,
+)
+from app.integrations.marine.open_meteo import (
+    OpenMeteoMarineProvider,
+)
 from app.integrations.personalization.base import (
     PersonalizationProvider,
 )
@@ -61,6 +67,9 @@ from app.services.alert_service import (
 )
 from app.services.homepage_service import (
     HomepageService,
+)
+from app.services.marine_service import (
+    MarineService,
 )
 from app.services.weather_context_service import (
     WeatherContextService,
@@ -107,6 +116,9 @@ def get_push_provider() -> PushProvider:
     )
 
 
+def get_marine_provider() -> MarineProvider:
+    return OpenMeteoMarineProvider()
+
 def get_homepage_service(
     session: Annotated[
         AsyncSession,
@@ -132,6 +144,10 @@ def get_homepage_service(
         PersonalizationProvider,
         Depends(get_personalization_provider),
     ],
+    marine_provider: Annotated[
+        MarineProvider,
+        Depends(get_marine_provider),
+    ],
 ) -> HomepageService:
     weather_service = WeatherService(
         provider=weather_provider,
@@ -143,9 +159,15 @@ def get_homepage_service(
         redis=redis,
     )
 
+    marine_service = MarineService(
+        provider=marine_provider,
+        redis=redis,
+    )
+
     weather_context_service = WeatherContextService(
         weather_service=weather_service,
         air_quality_service=(air_quality_service),
+        marine_service=marine_service,
     )
 
     alert_service = AlertService(

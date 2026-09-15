@@ -3,12 +3,18 @@ import logging
 
 import httpx
 
+from app.schemas.marine import (
+    CurrentMarineResponse,
+)
 from app.schemas.weather import (
     CurrentWeatherResponse,
     WeatherContextResponse,
 )
 from app.services.air_quality_service import (
     AirQualityService,
+)
+from app.services.marine_service import (
+    MarineService,
 )
 from app.services.weather_service import WeatherService
 
@@ -20,9 +26,11 @@ class WeatherContextService:
         self,
         weather_service: WeatherService,
         air_quality_service: AirQualityService,
+        marine_service: MarineService | None = None,
     ):
         self.weather_service = weather_service
         self.air_quality_service = air_quality_service
+        self.marine_service = marine_service
 
     @staticmethod
     def _unavailable_context(
@@ -117,4 +125,55 @@ class WeatherContextService:
             agriculture=agriculture,
             air_quality=air_quality,
             hourly_air_quality=hourly_air_quality.hourly,
+        )
+
+    async def get_marine_context(
+        self,
+        latitude: float,
+        longitude: float,
+    ) -> CurrentMarineResponse | None:
+        if self.marine_service is None:
+            return None
+
+        try:
+            marine = await self.marine_service.get_current(
+                latitude,
+                longitude,
+            )
+
+        except httpx.HTTPError as exc:
+            logger.warning(
+                (
+                    "Marine provider unavailable for "
+                    "latitude=%s longitude=%s error=%s"
+                ),
+                latitude,
+                longitude,
+                type(exc).__name__,
+            )
+
+            return None
+
+        if not marine.available:
+            return None
+
+        return marine
+
+
+    async def attach_marine_context(
+        self,
+        *,
+        context: WeatherContextResponse,
+        latitude: float,
+        longitude: float,
+    ) -> WeatherContextResponse:
+        marine = await self.get_marine_context(
+            latitude,
+            longitude,
+        )
+
+        return context.model_copy(
+            update={
+                "marine": marine,
+            }
         )

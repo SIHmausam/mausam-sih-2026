@@ -82,6 +82,13 @@ class MLFeatureBuilder:
             context.agriculture
         )
 
+        marine = context.marine
+
+        marine_available = bool(
+            marine
+            and marine.available
+        )
+
         daily = (
             MLFeatureBuilder
             ._find_daily_item(
@@ -481,19 +488,57 @@ class MLFeatureBuilder:
                 values["ozone"]
             ),
 
-            # Marine provider is not integrated yet.
-            wave_height=None,
-            wave_direction=None,
-            wave_period=None,
+            wave_height=(
+                marine.wave_height
+                if marine_available
+                else None
+            ),
 
-            swell_wave_height=None,
-            swell_wave_direction=None,
-            swell_wave_period=None,
+            wave_direction=(
+                marine.wave_direction
+                if marine_available
+                else None
+            ),
 
-            sea_level_height_msl=None,
-            sea_surface_temperature=None,
+            wave_period=(
+                marine.wave_period
+                if marine_available
+                else None
+            ),
 
-            marine_data_available=False,
+            swell_wave_height=(
+                marine.swell_wave_height
+                if marine_available
+                else None
+            ),
+
+            swell_wave_direction=(
+                marine.swell_wave_direction
+                if marine_available
+                else None
+            ),
+
+            swell_wave_period=(
+                marine.swell_wave_period
+                if marine_available
+                else None
+            ),
+
+            sea_level_height_msl=(
+                marine.sea_level_height_msl
+                if marine_available
+                else None
+            ),
+
+            sea_surface_temperature=(
+                marine.sea_surface_temperature
+                if marine_available
+                else None
+            ),
+
+            marine_data_available=(
+                marine_available
+            ),
 
             sunrise=(
                 values["sunrise"]
