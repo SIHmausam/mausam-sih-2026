@@ -2,6 +2,7 @@ from pydantic import (
     BaseModel,
     Field,
     field_validator,
+    model_validator,
 )
 
 from app.core.enums import (
@@ -32,7 +33,12 @@ class OnboardingRequest(BaseModel):
     temperature_unit: TemperatureUnit = TemperatureUnit.CELSIUS
 
     # A user now chooses exactly one persona.
-    persona: UserPersonaType
+    personas: list[UserPersonaType] = Field(
+        min_length=1,
+        max_length=3,
+    )
+
+    primary_persona: UserPersonaType
 
     interests: list[WeatherInterest]
 
@@ -55,6 +61,7 @@ class OnboardingRequest(BaseModel):
     personalization: PersonalizationSettings = PersonalizationSettings()
 
     @field_validator(
+        "personas",
         "interests",
         "activity_contexts",
     )
@@ -64,9 +71,22 @@ class OnboardingRequest(BaseModel):
         value,
     ):
         if len(value) != len(set(value)):
-            raise ValueError("Duplicate values are not allowed")
+            raise ValueError(
+                "Duplicate values are not allowed"
+            )
 
         return value
+
+    @model_validator(mode="after")
+    def validate_primary_persona(
+        self,
+    ):
+        if self.primary_persona not in self.personas:
+            raise ValueError(
+                "primary_persona must be one of personas"
+            )
+
+        return self
 
 
 class PreferencesResponse(BaseModel):
@@ -77,6 +97,10 @@ class PreferencesResponse(BaseModel):
     # None is possible only for a pre-onboarding
     # or legacy migrated user.
     persona: UserPersonaType | None
+
+    personas: list[UserPersonaType]
+
+    primary_persona: UserPersonaType | None
 
     preferred_start_hour: int | None
     preferred_end_hour: int | None
@@ -111,7 +135,13 @@ class PreferencesPatchRequest(BaseModel):
 
     temperature_unit: TemperatureUnit | None = None
 
-    persona: UserPersonaType | None = None
+    personas: list[UserPersonaType] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=3,
+    )
+
+    primary_persona: UserPersonaType | None = None
 
     preferred_start_hour: int | None = Field(
         default=None,
@@ -134,6 +164,7 @@ class PreferencesPatchRequest(BaseModel):
     personalization: PersonalizationSettingsPatch | None = None
 
     @field_validator(
+        "personas",
         "interests",
         "activity_contexts",
     )
@@ -146,6 +177,23 @@ class PreferencesPatchRequest(BaseModel):
             return value
 
         if len(value) != len(set(value)):
-            raise ValueError("Duplicate values are not allowed")
+            raise ValueError(
+                "Duplicate values are not allowed"
+            )
 
         return value
+
+    @model_validator(mode="after")
+    def validate_patch_personas(
+        self,
+    ):
+        if (
+            self.personas is not None
+            and self.primary_persona is not None
+            and self.primary_persona not in self.personas
+        ):
+            raise ValueError(
+                "primary_persona must be one of personas"
+            )
+
+        return self

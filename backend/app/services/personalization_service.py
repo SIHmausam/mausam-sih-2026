@@ -168,6 +168,11 @@ class PersonalizationService:
 
         persona = UserPersonaType(preference.persona)
 
+        personas = await self._get_selected_personas(
+            user_id=user_id,
+            primary_persona=persona,
+        )
+
         if not preference.personalized_homepage_enabled:
             return PersonalizationResult(
                 location_id="",
@@ -181,8 +186,13 @@ class PersonalizationService:
             ml_request = MLFeatureBuilder.build(
                 user_id=user_id,
                 city=city,
-                persona=persona,
+                personas=personas,
                 context=context,
+            )
+
+            logger.warning(
+                "Sending ML personalization personas: %s",
+                ml_request.personas,
             )
 
             ml_response = await self.personalization_provider.personalize(ml_request)
@@ -246,6 +256,11 @@ class PersonalizationService:
 
         persona = UserPersonaType(preference.persona)
 
+        personas = await self._get_selected_personas(
+            user_id=user_id,
+            primary_persona=persona,
+        )
+
         if not preference.personalized_homepage_enabled:
             return self._fallback(
                 location=location,
@@ -256,8 +271,13 @@ class PersonalizationService:
             ml_request = MLFeatureBuilder.build(
                 user_id=user_id,
                 city=location.city,
-                persona=persona,
+                personas=personas,
                 context=context,
+            )
+
+            logger.warning(
+                "Sending ML personalization personas: %s",
+                ml_request.personas,
             )
 
             ml_response = await self.personalization_provider.personalize(ml_request)
@@ -284,17 +304,9 @@ class PersonalizationService:
                 persona=persona,
             )
 
-        cards = [
-            PersonalizedCard(
-                rank=item.rank,
-                card=ML_CARD_REVERSE_MAP[item.card],
-                score=item.score,
-                insight=item.insight,
-            )
-            for item in ml_response.cards
-        ]
-
-        cards.sort(key=lambda item: item.rank)
+        cards = self._translate_ml_cards(
+            ml_response.cards
+        )
 
         return PersonalizationResult(
             location_id=str(location.id),
@@ -352,3 +364,38 @@ class PersonalizationService:
             )
 
         return translated
+
+    async def _get_selected_personas(
+        self,
+        *,
+        user_id: uuid.UUID,
+        primary_persona: UserPersonaType,
+    ) -> list[UserPersonaType]:
+        rows = await self.preference_repository.get_personas(
+            user_id
+        )
+
+        selected = [
+            UserPersonaType(row.persona)
+            for row in rows
+        ]
+
+        # Legacy safety: existing users may have a primary
+        # persona but no user_personas rows.
+        if not selected:
+            return [
+                primary_persona
+            ]
+
+        # Keep primary first for deterministic requests.
+        ordered = [
+            primary_persona
+        ]
+
+        ordered.extend(
+            persona
+            for persona in selected
+            if persona != primary_persona
+        )
+
+        return ordered
