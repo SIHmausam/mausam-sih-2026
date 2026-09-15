@@ -60,6 +60,12 @@ class Settings(BaseSettings):
         "https://air-quality-api.open-meteo.com/v1/air-quality"
     )
 
+    open_meteo_marine_url: str = (
+        "https://marine-api.open-meteo.com/v1/marine"
+    )
+
+    marine_max_grid_distance_km: float = 50.0
+
     openweather_map_api_key: str | None = None
 
     openweather_map_tile_url: str = (

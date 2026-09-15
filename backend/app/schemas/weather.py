@@ -6,6 +6,9 @@ from app.schemas.air_quality import (
     CurrentAirQualityResponse,
     HourlyAirQualityItem,
 )
+from app.schemas.marine import (
+    CurrentMarineResponse,
+)
 
 
 class CurrentWeatherResponse(BaseModel):
@@ -132,3 +135,4 @@ class WeatherContextResponse(BaseModel):
     air_quality: CurrentAirQualityResponse | None = None
 
     hourly_air_quality: list[HourlyAirQualityItem] = Field(default_factory=list)
+    marine: CurrentMarineResponse | None = None

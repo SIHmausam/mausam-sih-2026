@@ -182,6 +182,13 @@ class PersonalizationService:
                 cards=build_fallback_ranking(persona),
             )
 
+        context = await self._attach_marine_if_needed(
+            context=context,
+            personas=personas,
+            latitude=latitude,
+            longitude=longitude,
+        )
+
         try:
             ml_request = MLFeatureBuilder.build(
                 user_id=user_id,
@@ -190,7 +197,7 @@ class PersonalizationService:
                 context=context,
             )
 
-            logger.warning(
+            logger.debug(
                 "Sending ML personalization personas: %s",
                 ml_request.personas,
             )
@@ -267,6 +274,13 @@ class PersonalizationService:
                 persona=persona,
             )
 
+        context = await self._attach_marine_if_needed(
+            context=context,
+            personas=personas,
+            latitude=location.latitude,
+            longitude=location.longitude,
+        )
+
         try:
             ml_request = MLFeatureBuilder.build(
                 user_id=user_id,
@@ -275,7 +289,7 @@ class PersonalizationService:
                 context=context,
             )
 
-            logger.warning(
+            logger.debug(
                 "Sending ML personalization personas: %s",
                 ml_request.personas,
             )
@@ -316,16 +330,45 @@ class PersonalizationService:
             cards=cards,
         )
 
+    async def _attach_marine_if_needed(
+        self,
+        *,
+        context: WeatherContextResponse,
+        personas: list[UserPersonaType],
+        latitude: float,
+        longitude: float,
+    ) -> WeatherContextResponse:
+        """
+        Fetch marine conditions only when the user
+        has selected the Surfer persona.
+
+        Marine data is optional. If the provider is
+        unavailable or the location is too far from
+        a valid sea grid, the original weather context
+        is returned unchanged.
+        """
+
+        if UserPersonaType.SURFER not in personas:
+            return context
+
+        return (
+            await self.weather_context_service
+            .attach_marine_context(
+                context=context,
+                latitude=latitude,
+                longitude=longitude,
+            )
+        )
+
     @staticmethod
     def _translate_ml_cards(
         ml_cards,
     ) -> list[PersonalizedCard]:
         """
         Convert Phase 2 canonical ML cards into
-        the current Mausam/Flutter card contract.
+        the Mausam backend card contract.
 
-        Phase 2-only cards that the current frontend
-        does not support yet are intentionally ignored.
+        Unknown future ML card types are ignored safely.
         """
 
         translated: list[
