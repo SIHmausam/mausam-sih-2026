@@ -61,23 +61,43 @@ def calculate_interaction_score(row):
 # Calculate recency weight
 # ============================================================
 
-def calculate_recency_weight(timestamp, reference_time):
+def calculate_recency_weight(
+    timestamp,
+    reference_time,
+):
     """
     Recent interactions have greater influence.
 
     Half-life = 7 days.
+
+    All timestamps are normalized to UTC so that
+    timezone-aware and timezone-naive inputs can
+    safely be compared.
     """
 
-    timestamp = pd.to_datetime(timestamp)
-    reference_time = pd.to_datetime(reference_time)
+    timestamp = pd.to_datetime(
+        timestamp,
+        utc=True,
+    )
+
+    reference_time = pd.to_datetime(
+        reference_time,
+        utc=True,
+    )
 
     age_days = max(
-        (reference_time - timestamp).total_seconds() / 86400,
-        0
+        (
+            reference_time
+            - timestamp
+        ).total_seconds()
+        / 86400,
+        0,
     )
 
     return np.exp(
-        -np.log(2) * age_days / 7
+        -np.log(2)
+        * age_days
+        / 7
     )
 
 
@@ -110,7 +130,8 @@ def build_preference_profile(interactions, reference_time):
     interactions = interactions.copy()
 
     interactions["timestamp"] = pd.to_datetime(
-        interactions["timestamp"]
+        interactions["timestamp"],
+        utc=True,
     )
 
     # --------------------------------------------------------
