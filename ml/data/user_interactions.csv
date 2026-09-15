@@ -11,3 +11,7 @@ learning_test_user,uv,expand,2026-09-01T11:19:07.816861,3,learning_session_001
 learning_test_user,uv,expand,2026-09-01T11:19:07.820511,3,learning_session_001
 learning_test_user,uv,expand,2026-09-01T11:19:07.823658,3,learning_session_001
 learning_test_user,uv,expand,2026-09-01T11:19:07.826391,3,learning_session_001
+f43b828b-a074-44e2-af79-001403b3f8f8,running_conditions,expand,2026-09-15T09:46:18.393433Z,1,behavior-test-001
+f43b828b-a074-44e2-af79-001403b3f8f8,running_conditions,expand,2026-09-15T09:54:58.081962Z,1,behavior-test-002
+f43b828b-a074-44e2-af79-001403b3f8f8,running_conditions,expand,2026-09-15T09:55:10.750050Z,1,behavior-test-003
+f43b828b-a074-44e2-af79-001403b3f8f8,running_conditions,click,2026-09-15T09:55:23.045203Z,1,behavior-test-004
