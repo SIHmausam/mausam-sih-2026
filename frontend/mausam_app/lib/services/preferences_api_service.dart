@@ -41,7 +41,8 @@ class PreferencesApiService {
   Future<UserPreferences> completeOnboarding({
     required String preferredLanguage,
     required String temperatureUnit,
-    required String persona,
+    required List<String> personas,
+    required String primaryPersona,
     required List<String> interests,
     int? preferredStartHour,
     int? preferredEndHour,
@@ -52,7 +53,8 @@ class PreferencesApiService {
     final payload = <String, dynamic>{
       'preferred_language': preferredLanguage,
       'temperature_unit': temperatureUnit,
-      'persona': persona,
+      'personas': personas,
+      'primary_persona': primaryPersona,
       'interests': interests,
       'preferred_start_hour': preferredStartHour,
       'preferred_end_hour': preferredEndHour,
@@ -79,7 +81,8 @@ class PreferencesApiService {
   Future<UserPreferences> updatePreferences({
     String? preferredLanguage,
     String? temperatureUnit,
-    String? persona,
+    List<String>? personas,
+    String? primaryPersona,
     int? preferredStartHour,
     int? preferredEndHour,
     List<String>? interests,
@@ -97,8 +100,12 @@ class PreferencesApiService {
       payload['temperature_unit'] = temperatureUnit;
     }
 
-    if (persona != null) {
-      payload['persona'] = persona;
+    if (personas != null) {
+      payload['personas'] = personas;
+    }
+
+    if (primaryPersona != null) {
+      payload['primary_persona'] = primaryPersona;
     }
 
     if (preferredStartHour != null) {

@@ -14,6 +14,7 @@ import 'services/personalization_api_service.dart';
 import 'services/card_mapper.dart';
 import 'services/weather_code_mapper.dart';
 import 'services/weather_api_service.dart';
+import 'widgets/expandable_weather_card.dart';
 import 'services/location_search_service.dart';
 import 'services/location_service.dart';
 import 'services/location_api_service.dart';
@@ -778,31 +779,96 @@ class PersonaSelectionScreen extends StatefulWidget {
 }
 
 class _PersonaSelectionScreenState extends State<PersonaSelectionScreen> {
-  int _selectedPersona = 0;
+  final Set<int> _selectedPersonas = {0};
+  int _primaryPersona = 0;
 
   final List<Map<String, dynamic>> _personas = [
     {
       'title': 'Fitness Enthusiast',
+      'value': 'fitness',
       'subtitle': 'Weather insights for workouts and outdoor activity.',
       'icon': Icons.directions_run_rounded,
     },
     {
       'title': 'Farmer',
+      'value': 'farmer',
       'subtitle': 'Weather conditions that help you plan farm activities.',
       'icon': Icons.agriculture_rounded,
     },
     {
       'title': 'Traveler',
+      'value': 'traveller',
       'subtitle': 'Stay prepared for weather while you travel.',
       'icon': Icons.flight_takeoff_rounded,
     },
+    {
+      'title': 'Health Conscious',
+      'value': 'health',
+      'subtitle': 'Air quality, UV and weather insights for your wellbeing.',
+      'icon': Icons.health_and_safety_rounded,
+    },
+    {
+      'title': 'Surfer',
+      'value': 'surfer',
+      'subtitle': 'Marine weather, waves and water conditions.',
+      'icon': Icons.surfing_rounded,
+    },
+    {
+      'title': 'Parents & Families',
+      'value': 'parents_families',
+      'subtitle': 'Weather information for family plans and children.',
+      'icon': Icons.family_restroom_rounded,
+    },
+    {
+      'title': 'Commuter',
+      'value': 'commuter',
+      'subtitle': 'Weather conditions that help you plan daily travel.',
+      'icon': Icons.directions_car_rounded,
+    },
+    {
+      'title': 'Event Planner',
+      'value': 'event_planner',
+      'subtitle': 'Weather insights for planning outdoor events.',
+      'icon': Icons.event_rounded,
+    },
   ];
 
+  void _togglePersona(int index) {
+    setState(() {
+      if (_selectedPersonas.contains(index)) {
+        if (_selectedPersonas.length == 1) return;
+
+        _selectedPersonas.remove(index);
+
+        if (_primaryPersona == index) {
+          _primaryPersona = _selectedPersonas.first;
+        }
+      } else {
+        if (_selectedPersonas.length >= 3) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('You can select up to 3 personas.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+
+        _selectedPersonas.add(index);
+      }
+    });
+  }
+
   void _continue() {
+    final selected = _selectedPersonas.toList()..sort();
+
     Navigator.of(context).push(
       _darkRoute(
         page: LocationSetupScreen(
-          persona: _personas[_selectedPersona]['title'] as String,
+          personas: selected
+              .map((index) => _personas[index]['value'] as String)
+              .toList(),
+          primaryPersona: _personas[_primaryPersona]['value'] as String,
         ),
       ),
     );
@@ -868,12 +934,8 @@ class _PersonaSelectionScreenState extends State<PersonaSelectionScreen> {
                         title: _personas[index]['title'] as String,
                         subtitle: _personas[index]['subtitle'] as String,
                         icon: _personas[index]['icon'] as IconData,
-                        selected: _selectedPersona == index,
-                        onTap: () {
-                          setState(() {
-                            _selectedPersona = index;
-                          });
-                        },
+                        selected: _selectedPersonas.contains(index),
+                        onTap: () => _togglePersona(index),
                       ),
                     ),
                   ),
@@ -884,7 +946,7 @@ class _PersonaSelectionScreenState extends State<PersonaSelectionScreen> {
                     width: double.infinity,
                     height: 60,
                     child: ElevatedButton(
-                      onPressed: _continue,
+                      onPressed: _selectedPersonas.isEmpty ? null : _continue,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: const Color(0xFF182535),
@@ -1030,9 +1092,14 @@ class _PersonaCard extends StatelessWidget {
 }
 
 class LocationSetupScreen extends StatefulWidget {
-  final String persona;
+  final List<String> personas;
+  final String primaryPersona;
 
-  const LocationSetupScreen({super.key, required this.persona});
+  const LocationSetupScreen({
+    super.key,
+    required this.personas,
+    required this.primaryPersona,
+  });
 
   @override
   State<LocationSetupScreen> createState() => _LocationSetupScreenState();
@@ -1061,28 +1128,38 @@ class _LocationSetupScreenState extends State<LocationSetupScreen> {
   Future<void> _continue() async {
     if (_isCompletingOnboarding) return;
 
-    String backendPersona;
-    List<String> interests;
-    List<String> activityContexts;
+    final interests = <String, String>{
+      'fitness': 'temperature',
+      'farmer': 'soil_moisture',
+      'traveller': 'visibility',
+      'health': 'aqi',
+      'surfer': 'wind',
+      'parents_families': 'temperature',
+      'commuter': 'rainfall',
+      'event_planner': 'rainfall',
+    };
 
-    switch (widget.persona) {
-      case 'Farmer':
-        backendPersona = 'farmer';
-        interests = ['rainfall', 'soil_moisture', 'humidity'];
-        activityContexts = ['farming'];
-        break;
-      case 'Traveler':
-        backendPersona = 'traveller';
-        interests = ['rainfall', 'visibility', 'temperature'];
-        activityContexts = ['travel'];
-        break;
-      case 'Fitness Enthusiast':
-      default:
-        backendPersona = 'health';
-        interests = ['aqi', 'uv', 'temperature'];
-        activityContexts = ['outdoor_health'];
-        break;
-    }
+    final activityContexts = <String, String>{
+      'fitness': 'outdoor_health',
+      'farmer': 'farming',
+      'traveller': 'travel',
+      'health': 'outdoor_health',
+      'surfer': 'surfing',
+      'parents_families': 'family',
+      'commuter': 'commuting',
+      'event_planner': 'events',
+    };
+
+    final selectedInterests = <String>[
+      for (final persona in widget.personas)
+        if (interests.containsKey(persona)) interests[persona]!,
+    ].toSet().toList();
+
+    final selectedActivityContexts = <String>[
+      for (final persona in widget.personas)
+        if (activityContexts.containsKey(persona))
+          activityContexts[persona]!,
+    ].toSet().toList();
 
     setState(() {
       _isCompletingOnboarding = true;
@@ -1092,11 +1169,12 @@ class _LocationSetupScreenState extends State<LocationSetupScreen> {
       await _preferencesApiService.completeOnboarding(
         preferredLanguage: 'en',
         temperatureUnit: 'celsius',
-        persona: backendPersona,
-        interests: interests,
+        personas: widget.personas,
+        primaryPersona: widget.primaryPersona,
+        interests: selectedInterests,
         preferredStartHour: null,
         preferredEndHour: null,
-        activityContexts: activityContexts,
+        activityContexts: selectedActivityContexts,
         notifications: {
           'official_alerts': true,
           'routine_alerts': true,
@@ -1114,7 +1192,7 @@ class _LocationSetupScreenState extends State<LocationSetupScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        _darkRoute(page: MainShell(persona: widget.persona)),
+        _darkRoute(page: MainShell(persona: widget.primaryPersona)),
         (route) => false,
       );
     } catch (error) {
@@ -3193,6 +3271,59 @@ class WeatherDetailScreen extends StatelessWidget {
                   ],
 
                   _DetailGlassSection(
+                    title: 'DETAILS',
+                    child: Column(
+                      children: [
+                        for (int i = 0; i < card.details.length; i++) ...[
+                          if (i > 0)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Divider(
+                                color: Colors.white.withValues(alpha: 0.07),
+                                height: 1,
+                              ),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    card.details[i].contains(":") ? card.details[i].substring(0, card.details[i].indexOf(":")) : card.details[i],
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.62),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 18),
+                                Flexible(
+                                  child: Text(
+                                    card.details[i].contains(":")
+                                        ? card.details[i].substring(card.details[i].indexOf(":") + 1).trim()
+                                        : "—",
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  _DetailGlassSection(
                     title: 'INSIGHT',
                     child: Text(
                       card.insight,
@@ -3247,40 +3378,7 @@ class WeatherDetailScreen extends StatelessWidget {
 
                   const SizedBox(height: 14),
 
-                  _DetailGlassSection(
-                    title: 'TREND',
-                    child: Container(
-                      width: double.infinity,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.08),
-                        ),
-                      ),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.show_chart_rounded,
-                              color: Colors.white.withValues(alpha: 0.45),
-                              size: 28,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Trend data will appear here',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.45),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+
                 ],
               ),
             ),
@@ -5221,6 +5319,8 @@ class _HomeScreenState extends State<HomeScreen>
         });
   }
 
+  String _canonicalCardId(String id) { switch (id) { case 'weather_condition': return 'weather_conditions'; case 'rain': case 'rainfall': return 'rain_forecast'; case 'aqi': return 'air_quality'; case 'uv': return 'uv_allergy'; case 'soil_moisture': return 'farm_garden'; default: return id; } }
+
   Future<void> _loadPersonalization() async {
     try {
       final cards = await PersonalizationApiService.getPersonalizedCards(
@@ -5232,7 +5332,14 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
 
       setState(() {
-        _personalizedCards = cards;
+        final mergedCards = <PersonalizedCard>[...cards];
+        const fallbackIds = <String>['temperature', 'weather_conditions', 'humidity', 'rain_forecast', 'wind', 'air_quality', 'uv_allergy', 'running_conditions', 'surf_conditions', 'tide_water', 'farm_garden', 'commute_conditions', 'travel_conditions', 'family_school', 'event_conditions'];
+        for (final id in fallbackIds) {
+          if (!mergedCards.any((card) => _canonicalCardId(card.cardId) == id)) {
+            mergedCards.add(PersonalizedCard(cardId: id, rank: 999, score: 0, insight: 'Current conditions and details are available for this card.'));
+          }
+        }
+        _personalizedCards = mergedCards;
       });
     } catch (_) {
       // Keep the hardcoded cards as the safe fallback.
@@ -5358,8 +5465,8 @@ class _HomeScreenState extends State<HomeScreen>
             .whereType<CardDisplayData>()
             .toList();
 
-        final priorityCards = mappedCards.take(4).toList();
-        final secondaryCards = mappedCards.skip(4).take(4).toList();
+        final forYouCards = mappedCards.take(5).toList();
+        final otherWeatherCards = mappedCards.skip(5).toList();
 
         final alerts = buildWeatherAlerts(weather);
         final homepageAlert =
@@ -5427,20 +5534,16 @@ class _HomeScreenState extends State<HomeScreen>
 
                           const SizedBox(height: 28),
 
-                          SectionTitle(title: 'PERSONALIZED FOR YOU'),
+                          SectionTitle(title: 'FOR YOU'),
 
                           const SizedBox(height: 12),
 
-                          ...priorityCards.map(
+                          ...forYouCards.map(
                             (card) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: PriorityCard(
-                                icon: card.icon,
-                                title: card.title,
-                                value: card.value,
-                                status: card.status,
-                                insight: card.insight,
-                                indicatorColor: card.indicatorColor,
+                              child: ExpandableWeatherCard(
+                                card: card,
+                                featured: true,
                                 onTap: () {
                                   Navigator.of(context).push(
                                     _weatherDetailRoute(
@@ -5454,99 +5557,30 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 8),
+                          if (otherWeatherCards.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            SectionTitle(title: 'OTHER WEATHER'),
+                            const SizedBox(height: 12),
 
-                          Row(
-                            children: [
-                              if (secondaryCards.isNotEmpty)
-                                Expanded(
-                                  child: SmallMetricCard(
-                                    icon: secondaryCards[0].icon,
-                                    title: secondaryCards[0].title,
-                                    value: secondaryCards[0].value,
-                                    indicatorColor:
-                                        secondaryCards[0].indicatorColor,
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        _weatherDetailRoute(
-                                          card: secondaryCards[0],
-                                          persona: widget.persona,
-                                          weather: weather,
-                                        ),
-                                      );
-                                    },
-                                  ),
+                            ...otherWeatherCards.map(
+                              (card) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: ExpandableWeatherCard(
+                                  card: card,
+                                  featured: false,
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      _weatherDetailRoute(
+                                        card: card,
+                                        persona: widget.persona,
+                                        weather: weather,
+                                      ),
+                                    );
+                                  },
                                 ),
-                              if (secondaryCards.length > 1) ...[
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: SmallMetricCard(
-                                    icon: secondaryCards[1].icon,
-                                    title: secondaryCards[1].title,
-                                    value: secondaryCards[1].value,
-                                    indicatorColor:
-                                        secondaryCards[1].indicatorColor,
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        _weatherDetailRoute(
-                                          card: secondaryCards[1],
-                                          persona: widget.persona,
-                                          weather: weather,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          Row(
-                            children: [
-                              if (secondaryCards.length > 2)
-                                Expanded(
-                                  child: SmallMetricCard(
-                                    icon: secondaryCards[2].icon,
-                                    title: secondaryCards[2].title,
-                                    value: secondaryCards[2].value,
-                                    indicatorColor:
-                                        secondaryCards[2].indicatorColor,
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        _weatherDetailRoute(
-                                          card: secondaryCards[2],
-                                          persona: widget.persona,
-                                          weather: weather,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              if (secondaryCards.length > 3) ...[
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: SmallMetricCard(
-                                    icon: secondaryCards[3].icon,
-                                    title: secondaryCards[3].title,
-                                    value: secondaryCards[3].value,
-                                    indicatorColor:
-                                        secondaryCards[3].indicatorColor,
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        _weatherDetailRoute(
-                                          card: secondaryCards[3],
-                                          persona: widget.persona,
-                                          weather: weather,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
+                              ),
+                            ),
+                          ],
 
                           if (weather.hourly.isNotEmpty) ...[
                             const SizedBox(height: 28),
@@ -5938,10 +5972,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
       if (!mounted) return;
 
       setState(() {
-        _savedLocations = [
-          ..._savedLocations,
-          savedLocation,
-        ].take(10).toList();
+        _savedLocations = [..._savedLocations, savedLocation].take(10).toList();
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6105,10 +6136,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
   Widget _buildSavedLocations() {
     if (_isLoadingSavedLocations) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.white,
-          strokeWidth: 2.2,
-        ),
+        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
       );
     }
 
@@ -6119,10 +6147,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
           child: Text(
             'Unable to load saved locations.',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: Colors.white60, fontSize: 14),
           ),
         ),
       );
@@ -6135,10 +6160,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
           child: Text(
             'No saved locations yet.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white60,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.white60, fontSize: 14),
           ),
         ),
       );
@@ -6165,10 +6187,7 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
               );
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 17,
-                vertical: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 16),
               decoration: BoxDecoration(
                 color: selected
                     ? Colors.white.withValues(alpha: 0.10)
@@ -6378,7 +6397,8 @@ class _LocationSearchScreenState extends State<LocationSearchScreen> {
       if (e.toString().contains('Location services are disabled')) {
         message = 'Please turn on location services and try again.';
       } else if (e.toString().contains('permanently denied')) {
-        message = 'Location permission is disabled. Please enable it in Settings.';
+        message =
+            'Location permission is disabled. Please enable it in Settings.';
       } else if (e.toString().contains('permission denied')) {
         message = 'Location permission was denied.';
       }
@@ -7375,10 +7395,96 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoadingUser = true;
   String? _userError;
 
+  UserPreferences? _preferences;
+  bool _isLoadingPreferences = true;
+
+  List<String> _selectedPersonas = const ["fitness"];
+  String _primaryPersona = "fitness";
+  String? _personaLimitMessage;
+
+  bool _isSavingPersonas = false;
+
+  static const List<Map<String, dynamic>> _profilePersonaDefinitions = [
+    {
+      "title": "Fitness Enthusiast",
+      "value": "fitness",
+      "subtitle": "Weather insights for workouts and outdoor activity.",
+      "icon": Icons.directions_run_rounded,
+    },
+    {
+      "title": "Farmer",
+      "value": "farmer",
+      "subtitle": "Weather conditions that help you plan farm activities.",
+      "icon": Icons.agriculture_rounded,
+    },
+    {
+      "title": "Traveller",
+      "value": "traveller",
+      "subtitle": "Stay prepared for weather while you travel.",
+      "icon": Icons.flight_takeoff_rounded,
+    },
+    {
+      "title": "Health Conscious",
+      "value": "health",
+      "subtitle": "Air quality, UV and weather insights for your wellbeing.",
+      "icon": Icons.health_and_safety_rounded,
+    },
+    {
+      "title": "Surfer",
+      "value": "surfer",
+      "subtitle": "Marine weather, waves and water conditions.",
+      "icon": Icons.surfing_rounded,
+    },
+    {
+      "title": "Parents & Families",
+      "value": "parents_families",
+      "subtitle": "Weather information for family plans and children.",
+      "icon": Icons.family_restroom_rounded,
+    },
+    {
+      "title": "Commuter",
+      "value": "commuter",
+      "subtitle": "Weather conditions that help you plan daily travel.",
+      "icon": Icons.directions_car_rounded,
+    },
+    {
+      "title": "Event Planner",
+      "value": "event_planner",
+      "subtitle": "Weather insights for planning outdoor events.",
+      "icon": Icons.event_rounded,
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
     _loadUser();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    try {
+      final preferences = await _preferencesApiService.getPreferences();
+
+      if (!mounted) return;
+
+      setState(() {
+        _preferences = preferences;
+        _selectedPersonas = preferences.personas.isNotEmpty
+            ? List<String>.from(preferences.personas)
+            : const ["fitness"];
+        _primaryPersona =
+            preferences.primaryPersona ?? _selectedPersonas.first;
+        _isLoadingPreferences = false;
+        _personaLimitMessage = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingPreferences = false;
+      });
+    }
   }
 
   Future<void> _loadUser() async {
@@ -7402,49 +7508,324 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  bool _isUpdatingPersona = false;
+  void _changePersona() {
+    _showProfilePersonaSheet();
+  }
 
-  Future<void> _changePersona(String persona) async {
-    if (_isUpdatingPersona || persona == widget.persona) {
+  String _profilePersonaTitle(String value) {
+    for (final persona in _profilePersonaDefinitions) {
+      if (persona["value"] == value) {
+        return persona["title"] as String;
+      }
+    }
+    return "Fitness Enthusiast";
+  }
+
+  String _profilePersonaSummary() {
+    if (_selectedPersonas.isEmpty) {
+      return "Fitness Enthusiast";
+    }
+    return _selectedPersonas.map(_profilePersonaTitle).join(", ");
+  }
+
+  Future<void> _saveProfilePersonas(
+    List<String> selected,
+    String primary,
+  ) async {
+    if (_isSavingPersonas ||
+        selected.isEmpty ||
+        selected.length > 3 ||
+        !selected.contains(primary)) {
       return;
     }
 
+    final previousSelected = List<String>.from(_selectedPersonas);
+    final previousPrimary = _primaryPersona;
+
     setState(() {
-      _isUpdatingPersona = true;
+      _selectedPersonas = List<String>.from(selected);
+      _primaryPersona = primary;
+      _isSavingPersonas = true;
+      _personaLimitMessage = null;
     });
 
     try {
-      await _preferencesApiService.updatePreferences(
-        persona: switch (persona) {
-          'Farmer' => 'farmer',
-          'Traveler' => 'traveller',
-          'Fitness' => 'health',
-          _ => 'health',
-        },
+      final updated = await _preferencesApiService.updatePreferences(
+        personas: selected,
+        primaryPersona: primary,
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      widget.onPersonaChanged(persona);
+      setState(() {
+        _preferences = updated;
+        _selectedPersonas = List<String>.from(updated.personas);
+        _primaryPersona =
+            updated.primaryPersona ?? updated.personas.firstOrNull ?? primary;
+        _isSavingPersonas = false;
+        _personaLimitMessage = null;
+      });
+
+      widget.onPersonaChanged(_profilePersonaTitle(_primaryPersona));
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _selectedPersonas = previousSelected;
+        _primaryPersona = previousPrimary;
+        _isSavingPersonas = false;
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
+          content: Text(
+            error.toString().replaceFirst("Exception: ", ""),
+          ),
+          behavior: SnackBarBehavior.floating,
         ),
       );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUpdatingPersona = false;
-        });
-      }
     }
+  }
+
+  void _showProfilePersonaSheet() {
+    final selected = Set<String>.from(_selectedPersonas);
+    var primary = _primaryPersona;
+    String? limitMessage;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF182A3D),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "PERSONAS",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: _profilePersonaDefinitions.map((personaData) {
+                            final value = personaData["value"] as String;
+                            final title = personaData["title"] as String;
+                            final subtitle = personaData["subtitle"] as String;
+                            final icon = personaData["icon"] as IconData;
+                            final isSelected = selected.contains(value);
+                            final isPrimary = primary == value;
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.white.withValues(alpha: 0.17)
+                                      : Colors.white.withValues(alpha: 0.055),
+                                  borderRadius: BorderRadius.circular(17),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? Colors.white.withValues(alpha: 0.30)
+                                        : Colors.white.withValues(alpha: 0.08),
+                                  ),
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(17),
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 2,
+                                    ),
+                                    leading: Container(
+                                      width: 38,
+                                      height: 38,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? Colors.white.withValues(alpha: 0.13)
+                                            : Colors.white.withValues(alpha: 0.06),
+                                        borderRadius: BorderRadius.circular(11),
+                                      ),
+                                      child: Icon(
+                                        icon,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      subtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.48),
+                                        fontSize: 10.5,
+                                      ),
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: isSelected
+                                              ? () {
+                                                  setSheetState(() {
+                                                    primary = value;
+                                                    limitMessage = null;
+                                                  });
+                                                }
+                                              : null,
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(8),
+                                            child: Text(
+                                              isPrimary ? "★" : "☆",
+                                              style: TextStyle(
+                                                color: isPrimary
+                                                    ? Colors.white
+                                                    : Colors.white.withValues(
+                                                        alpha: 0.35,
+                                                      ),
+                                                fontSize: 21,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Icon(
+                                          isSelected
+                                              ? Icons.check_circle_rounded
+                                              : Icons.circle_outlined,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.white.withValues(
+                                                  alpha: 0.28,
+                                                ),
+                                          size: 20,
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () {
+                                      setSheetState(() {
+                                        if (isSelected) {
+                                          if (selected.length == 1) return;
+                                          selected.remove(value);
+                                          limitMessage = null;
+                                          if (primary == value) {
+                                            primary = selected.first;
+                                          }
+                                        } else {
+                                          if (selected.length >= 3) {
+                                            limitMessage =
+                                                "You can choose only 3 personas.";
+                                            return;
+                                          }
+                                          selected.add(value);
+                                          limitMessage = null;
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                    if (limitMessage != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            limitMessage!,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.72),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: selected.isEmpty ||
+                                !selected.contains(primary) ||
+                                _isSavingPersonas
+                            ? null
+                            : () {
+                                Navigator.pop(sheetContext);
+                                _saveProfilePersonas(
+                                  selected.toList(),
+                                  primary,
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF182535),
+                          disabledBackgroundColor:
+                              Colors.white.withValues(alpha: 0.16),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          _isSavingPersonas ? "Saving..." : "Save",
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   String get _personaTitle {
@@ -7590,34 +7971,58 @@ class _ProfilePageState extends State<ProfilePage> {
                 const _ProfileSectionTitle(title: 'PERSONA'),
 
                 GlassContainer(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      _PersonaOption(
-                        icon: Icons.fitness_center_rounded,
-                        title: 'Fitness Enthusiast',
-                        subtitle:
-                            'Health, UV, air quality and outdoor conditions.',
-                        selected: widget.persona == 'Fitness Enthusiast',
-                        onTap: () => _changePersona('Fitness Enthusiast'),
-                      ),
-                      const SizedBox(height: 10),
-                      _PersonaOption(
-                        icon: Icons.agriculture_outlined,
-                        title: 'Farmer',
-                        subtitle: 'Weather conditions relevant to agricultural activity.',
-                        selected: widget.persona == 'Farmer',
-                        onTap: () => _changePersona('Farmer'),
-                      ),
-                      const SizedBox(height: 10),
-                      _PersonaOption(
-                        icon: Icons.luggage_outlined,
-                        title: 'Traveler',
-                        subtitle: 'Travel-friendly weather and environmental information.',
-                        selected: widget.persona == 'Traveler',
-                        onTap: () => _changePersona('Traveler'),
-                      ),
-                    ],
+                  padding: const EdgeInsets.all(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: _changePersona,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.10),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.groups_rounded,
+                            color: Colors.white,
+                            size: 23,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Personas",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _profilePersonaSummary(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.58),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: Colors.white.withValues(alpha: 0.55),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -7872,6 +8277,57 @@ class _SettingsPageState extends State<SettingsPage> {
     serverClientId: AppConfig.googleServerClientId,
   );
 
+  static const List<Map<String, dynamic>> _settingsPersonaDefinitions = [
+    {
+      'title': 'Fitness Enthusiast',
+      'value': 'fitness',
+      'subtitle': 'Weather insights for workouts and outdoor activity.',
+      'icon': Icons.directions_run_rounded,
+    },
+    {
+      'title': 'Farmer',
+      'value': 'farmer',
+      'subtitle': 'Weather conditions that help you plan farm activities.',
+      'icon': Icons.agriculture_rounded,
+    },
+    {
+      'title': 'Traveller',
+      'value': 'traveller',
+      'subtitle': 'Stay prepared for weather while you travel.',
+      'icon': Icons.flight_takeoff_rounded,
+    },
+    {
+      'title': 'Health Conscious',
+      'value': 'health',
+      'subtitle': 'Air quality, UV and weather insights for your wellbeing.',
+      'icon': Icons.health_and_safety_rounded,
+    },
+    {
+      'title': 'Surfer',
+      'value': 'surfer',
+      'subtitle': 'Marine weather, waves and water conditions.',
+      'icon': Icons.surfing_rounded,
+    },
+    {
+      'title': 'Parents & Families',
+      'value': 'parents_families',
+      'subtitle': 'Weather information for family plans and children.',
+      'icon': Icons.family_restroom_rounded,
+    },
+    {
+      'title': 'Commuter',
+      'value': 'commuter',
+      'subtitle': 'Weather conditions that help you plan daily travel.',
+      'icon': Icons.directions_car_rounded,
+    },
+    {
+      'title': 'Event Planner',
+      'value': 'event_planner',
+      'subtitle': 'Weather insights for planning outdoor events.',
+      'icon': Icons.event_rounded,
+    },
+  ];
+
   bool _isSigningOut = false;
 
   UserPreferences? _preferences;
@@ -7880,6 +8336,8 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _preferencesError;
 
   String persona = 'Fitness';
+  List<String> _selectedPersonas = const ['fitness'];
+  String _primaryPersona = 'fitness';
   String interests = 'Outdoor Run, Air Quality';
   String location = 'Ghaziabad, UP';
   String weatherAlerts = 'Severe Only';
@@ -7914,6 +8372,8 @@ class _SettingsPageState extends State<SettingsPage> {
         _preferencesError = null;
 
         persona = _displayPersona(preferences.persona);
+        _selectedPersonas = List<String>.from(preferences.personas);
+        _primaryPersona = preferences.primaryPersona ?? preferences.personas.firstOrNull ?? 'fitness';
         interests = _displayInterests(preferences.interests);
         temperatureUnit = _displayTemperatureUnit(preferences.temperatureUnit);
         language = _displayLanguage(preferences.preferredLanguage);
@@ -7942,16 +8402,32 @@ class _SettingsPageState extends State<SettingsPage> {
     switch (value) {
       case 'fitness_enthusiast':
       case 'fitness':
-      case 'health':
-        return 'Fitness';
+        return 'Fitness Enthusiast';
       case 'farmer':
         return 'Farmer';
       case 'traveler':
       case 'traveller':
-        return 'Traveler';
+        return 'Traveller';
+      case 'health':
+        return 'Health Conscious';
+      case 'surfer':
+        return 'Surfer';
+      case 'parents_families':
+        return 'Parents & Families';
+      case 'commuter':
+        return 'Commuter';
+      case 'event_planner':
+        return 'Event Planner';
       default:
-        return 'Fitness';
+        return 'Fitness Enthusiast';
     }
+  }
+
+  String _displayPersonaList(List<String> values) {
+    if (values.isEmpty) {
+      return 'Fitness Enthusiast';
+    }
+    return values.map(_displayPersona).join(', ');
   }
 
   String _displayInterests(List<String> values) {
@@ -8126,9 +8602,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: Column(
                     children: [
                       _GlassActionRow(
-                        title: 'Change persona',
-                        value: persona,
-                        subtitle: 'Choose how Mausam prioritizes your weather',
+                        title: 'Personas',
+                        value: _displayPersonaList(_selectedPersonas),
+                        subtitle: 'Up to 3 personas • one primary',
                         icon: Icons.person_outline_rounded,
                         onTap: _changePersona,
                       ),
@@ -8449,48 +8925,44 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  String _backendPersona(String value) {
-    switch (value) {
-      case 'Farmer':
-        return 'farmer';
-      case 'Traveler':
-        return 'traveller';
-      default:
-        return 'health';
-    }
-  }
-
-  Future<void> _updatePersona(String value) async {
+  Future<void> _savePersonas(List<String> selected, String primary) async {
     if (_preferences == null || _isSaving) return;
+    if (selected.isEmpty || selected.length > 3 || !selected.contains(primary)) return;
 
-    final previousPersona = persona;
+    final previousSelected = List<String>.from(_selectedPersonas);
+    final previousPrimary = _primaryPersona;
+
     setState(() {
-      persona = value;
+      _selectedPersonas = List<String>.from(selected);
+      _primaryPersona = primary;
       _isSaving = true;
     });
 
     try {
       final updated = await _preferencesApiService.updatePreferences(
-        persona: _backendPersona(value),
+        personas: selected,
+        primaryPersona: primary,
       );
 
       if (!mounted) return;
 
-      final updatedPersona = _displayPersona(updated.persona);
-
       setState(() {
         _preferences = updated;
+        _selectedPersonas = List<String>.from(updated.personas);
+        _primaryPersona =
+            updated.primaryPersona ?? updated.personas.firstOrNull ?? primary;
+        persona = _displayPersona(_primaryPersona);
         _isSaving = false;
         _preferencesError = null;
-        persona = updatedPersona;
       });
 
-      widget.onPersonaChanged?.call(updatedPersona);
+      widget.onPersonaChanged?.call(_displayPersona(_primaryPersona));
     } catch (error) {
       if (!mounted) return;
 
       setState(() {
-        persona = previousPersona;
+        _selectedPersonas = previousSelected;
+        _primaryPersona = previousPrimary;
         _isSaving = false;
         _preferencesError = error.toString().replaceFirst('Exception: ', '');
       });
@@ -8505,13 +8977,248 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  void _changePersona() {
-    _showChoiceSheet(
-      title: 'Change persona',
-      options: const ['Fitness', 'Farmer', 'Traveler'],
-      selected: persona,
-      onSelected: (value) => _updatePersona(value),
+  void _showPersonaSettingsSheet() {
+    final selected = Set<String>.from(_selectedPersonas);
+    var primary = _primaryPersona;
+  String? limitMessage;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF182A3D),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'PERSONAS',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: _settingsPersonaDefinitions.map((personaData) {
+                            final value = personaData['value'] as String;
+                            final title = personaData['title'] as String;
+                            final subtitle = personaData['subtitle'] as String;
+                            final icon = personaData['icon'] as IconData;
+                            final isSelected = selected.contains(value);
+                            final isPrimary = primary == value;
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.white.withValues(alpha: 0.17)
+                                      : Colors.white.withValues(alpha: 0.055),
+                                  borderRadius: BorderRadius.circular(17),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? Colors.white.withValues(alpha: 0.30)
+                                        : Colors.white.withValues(alpha: 0.08),
+                                  ),
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(17),
+                                  child: ListTile(
+                                    dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 2,
+                                  ),
+                                  leading: Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Colors.white.withValues(alpha: 0.13)
+                                          : Colors.white.withValues(alpha: 0.06),
+                                      borderRadius: BorderRadius.circular(11),
+                                    ),
+                                    child: Icon(
+                                      icon,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    title,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.48),
+                                      fontSize: 10.5,
+                                    ),
+                                  ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: isSelected
+                                            ? () {
+                                                setSheetState(() {
+                                                  primary = value;
+                                                });
+                                              }
+                                            : null,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(8),
+                                          child: Text(
+                                            isPrimary ? '★' : '☆',
+                                            style: TextStyle(
+                                              color: isPrimary
+                                                  ? Colors.white
+                                                  : Colors.white.withValues(
+                                                      alpha: 0.35,
+                                                    ),
+                                              fontSize: 21,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Icon(
+                                        isSelected
+                                            ? Icons.check_circle_rounded
+                                            : Icons.circle_outlined,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : Colors.white.withValues(
+                                                alpha: 0.28,
+                                              ),
+                                        size: 20,
+                                      ),
+                                    ],
+                                  ),
+                                  onTap: () {
+                                    setSheetState(() {
+                                      if (isSelected) {
+                                        if (selected.length == 1) return;
+                                        selected.remove(value);
+                                        limitMessage = null;
+                                        if (primary == value) {
+                                          primary = selected.first;
+                                        }
+                                      } else {
+                                        if (selected.length >= 3) {
+                                          setSheetState(() {
+                                            limitMessage =
+                                                'You can choose only 3 personas.';
+                                          });
+                                          return;
+                                        }
+                                        selected.add(value);
+                                      }
+                                    });
+                                  },
+                                ),
+                              ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                    if (limitMessage != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            limitMessage!,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.72),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: selected.isEmpty ||
+                                !selected.contains(primary)
+                            ? null
+                            : () {
+                                Navigator.pop(sheetContext);
+                                _savePersonas(
+                                  selected.toList(),
+                                  primary,
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF182535),
+                          disabledBackgroundColor:
+                              Colors.white.withValues(alpha: 0.16),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'Save',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
+  }
+
+  void _changePersona() {
+    _showPersonaSettingsSheet();
   }
 
   void _editInterests() {
