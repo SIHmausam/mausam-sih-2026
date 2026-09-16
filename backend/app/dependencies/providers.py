@@ -26,6 +26,9 @@ from app.integrations.email.smtp import SMTPEmailProvider
 from app.integrations.google_auth import (
     GoogleTokenVerifier,
 )
+from app.integrations.llm.gemini_client import GeminiClient
+from app.integrations.llm.groq_client import GroqClient
+from app.integrations.llm.llm_provider import FallbackLLMProvider
 from app.integrations.marine.base import (
     MarineProvider,
 )
@@ -68,6 +71,7 @@ from app.services.alert_service import (
 from app.services.homepage_service import (
     HomepageService,
 )
+from app.services.llm_insight_service import LLMInsightService
 from app.services.marine_service import (
     MarineService,
 )
@@ -86,6 +90,19 @@ def get_personalization_provider() -> PersonalizationProvider:
     return MLAPIPersonalizationProvider(
         base_url=settings.ml_service_url,
         timeout_seconds=(settings.ml_request_timeout_seconds),
+    )
+
+def get_llm_insight_service() -> LLMInsightService | None:
+    if not settings.llm_enabled:
+        return None
+
+    llm_client = FallbackLLMProvider(
+        primary=GroqClient(),
+        secondary=GeminiClient(),
+    )
+
+    return LLMInsightService(
+        llm_client=llm_client,
     )
 
 
@@ -148,6 +165,10 @@ def get_homepage_service(
         MarineProvider,
         Depends(get_marine_provider),
     ],
+    llm_insight_service: Annotated[
+        LLMInsightService | None,
+        Depends(get_llm_insight_service),
+    ],
 ) -> HomepageService:
     weather_service = WeatherService(
         provider=weather_provider,
@@ -180,6 +201,7 @@ def get_homepage_service(
         weather_context_service=(weather_context_service),
         alert_service=alert_service,
         personalization_provider=(personalization_provider),
+        llm_insight_service=llm_insight_service,
     )
 
 

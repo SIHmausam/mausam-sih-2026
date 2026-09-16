@@ -9,6 +9,7 @@ from app.core.redis import get_redis
 from app.dependencies.auth import get_current_user
 from app.dependencies.providers import (
     get_air_quality_provider,
+    get_llm_insight_service,
     get_marine_provider,
     get_personalization_provider,
     get_weather_provider,
@@ -22,6 +23,9 @@ from app.integrations.weather.base import WeatherProvider
 from app.models.user import User
 from app.schemas.personalization import PersonalizationResult
 from app.services.air_quality_service import AirQualityService
+from app.services.llm_insight_service import (
+    LLMInsightService,
+)
 from app.services.marine_service import (
     MarineService,
 )
@@ -77,6 +81,10 @@ async def get_personalization(
         PersonalizationProvider,
         Depends(get_personalization_provider),
     ],
+    llm_insight_service: Annotated[
+        LLMInsightService | None,
+        Depends(get_llm_insight_service),
+    ],
 ):
     weather_service = WeatherService(
         provider=weather_provider,
@@ -108,6 +116,7 @@ async def get_personalization(
         session=session,
         weather_context_service=weather_context_service,
         personalization_provider=personalization_provider,
+        llm_insight_service=llm_insight_service,
     )
 
     return await personalization_service.personalize_at_coordinates(

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 from typing import Any, ClassVar, Protocol
 
 from app.schemas.llm import LLMInsightResponse
 
+logger = logging.getLogger(__name__)
 
 class LLMClient(Protocol):
     async def generate_json(
@@ -102,6 +105,241 @@ class LLMInsightService:
             "precipitation_probability",
             "temperature_2m",
             "relative_humidity_2m",
+        ),
+    }
+
+    FIELD_METADATA: ClassVar[
+        dict[str, dict[str, str]]
+    ] = {
+        "temperature_2m": {
+            "unit": "°C",
+            "meaning": "air temperature",
+        },
+        "relative_humidity_2m": {
+            "unit": "%",
+            "meaning": "relative humidity",
+        },
+        "precipitation_probability": {
+            "unit": "%",
+            "meaning": "chance of precipitation",
+        },
+        "rain": {
+            "unit": "mm",
+            "meaning": "rain amount",
+        },
+        "wind_speed_10m": {
+            "unit": "km/h",
+            "meaning": "wind speed",
+        },
+        "visibility": {
+            "unit": "m",
+            "meaning": "visibility distance",
+        },
+        "us_aqi": {
+            "unit": "US AQI",
+            "meaning": "air quality index",
+        },
+        "uv_index": {
+            "unit": "UV index",
+            "meaning": "UV index",
+        },
+        "soil_moisture_0_to_7cm": {
+            "unit": "m³/m³",
+            "meaning": "surface soil moisture",
+        },
+        "wave_height": {
+            "unit": "m",
+            "meaning": "wave height",
+        },
+        "wave_period": {
+            "unit": "s",
+            "meaning": "wave period",
+        },
+        "sea_surface_temperature": {
+            "unit": "°C",
+            "meaning": "sea surface temperature",
+        },
+    }
+
+    UNSUPPORTED_CLASSIFICATION_TERMS: ClassVar[
+        set[str]
+    ] = {
+        "high",
+        "low",
+        "moderate",
+        "light",
+        "strong",
+        "warm",
+        "cool",
+        "hot",
+        "cold",
+        "comfortable",
+        "uncomfortable",
+        "small",
+        "large",
+        "rough",
+        "calm",
+        "good",
+        "poor",
+        "acceptable",
+        "healthy",
+        "unhealthy",
+        "favorable",
+        "unfavorable",
+        "suitable",
+        "unsuitable",
+        "safe",
+        "unsafe",
+    }
+
+
+    FALLBACK_FIELD_ORDER: ClassVar[
+        dict[str, tuple[str, ...]]
+    ] = {
+        "temperature": (
+            "temperature_2m",
+        ),
+        "weather_conditions": (
+            "weather_code",
+        ),
+        "humidity": (
+            "relative_humidity_2m",
+        ),
+        "rain_forecast": (
+            "precipitation_probability",
+            "rain",
+        ),
+        "wind": (
+            "wind_speed_10m",
+        ),
+        "air_quality": (
+            "us_aqi",
+        ),
+        "uv_allergy": (
+            "uv_index",
+            "relative_humidity_2m",
+        ),
+        "running_conditions": (
+            "temperature_2m",
+            "precipitation_probability",
+        ),
+        "surf_conditions": (
+            "wave_height",
+            "wave_period",
+        ),
+        "tide_water": (
+            "sea_surface_temperature",
+        ),
+        "farm_garden": (
+            "soil_moisture_0_to_7cm",
+            "precipitation_probability",
+        ),
+        "commute_conditions": (
+            "visibility",
+            "precipitation_probability",
+        ),
+        "travel_conditions": (
+            "precipitation_probability",
+            "wind_speed_10m",
+        ),
+        "family_school": (
+            "precipitation_probability",
+        ),
+        "event_conditions": (
+            "precipitation_probability",
+            "temperature_2m",
+        ),
+    }
+
+    WEATHER_CODE_DESCRIPTIONS: ClassVar[
+        dict[int, str]
+    ] = {
+        0: "clear sky",
+        1: "mainly clear",
+        2: "partly cloudy",
+        3: "overcast",
+        45: "fog",
+        48: "depositing rime fog",
+        51: "light drizzle",
+        53: "moderate drizzle",
+        55: "dense drizzle",
+        56: "light freezing drizzle",
+        57: "dense freezing drizzle",
+        61: "slight rain",
+        63: "moderate rain",
+        65: "heavy rain",
+        66: "light freezing rain",
+        67: "heavy freezing rain",
+        71: "slight snowfall",
+        73: "moderate snowfall",
+        75: "heavy snowfall",
+        77: "snow grains",
+        80: "slight rain showers",
+        81: "moderate rain showers",
+        82: "violent rain showers",
+        85: "slight snow showers",
+        86: "heavy snow showers",
+        95: "thunderstorm",
+        96: "thunderstorm with slight hail",
+        99: "thunderstorm with heavy hail",
+    }
+
+    CARD_GUIDANCE: ClassVar[
+        dict[str, str]
+    ] = {
+        "temperature": (
+            "Focus on practical clothing or outdoor-planning guidance."
+        ),
+        "weather_conditions": (
+            "Explain how the current sky/weather condition may affect "
+            "ordinary outdoor plans."
+        ),
+        "humidity": (
+            "Give practical comfort-oriented guidance for outdoor plans."
+        ),
+        "rain_forecast": (
+            "Help the user decide whether rain preparation may be useful."
+        ),
+        "wind": (
+            "Explain any practical consideration for ordinary outdoor plans."
+        ),
+        "air_quality": (
+            "Give cautious air-quality awareness guidance. Do not make "
+            "medical claims."
+        ),
+        "uv_allergy": (
+            "Give cautious outdoor exposure guidance based on supplied UV "
+            "and environmental information. Do not make medical claims."
+        ),
+        "running_conditions": (
+            "Give practical weather-related preparation for outdoor exercise "
+            "without declaring the activity safe or unsafe."
+        ),
+        "surf_conditions": (
+            "Describe what the marine conditions mean for planning, but do "
+            "not declare surfing safe or suitable. Remind the user that local "
+            "tide, currents, and beach hazards may also matter."
+        ),
+        "tide_water": (
+            "Give useful planning context for water activities without making "
+            "marine safety claims."
+        ),
+        "farm_garden": (
+            "Give cautious monitoring or preparation guidance based on soil "
+            "and rain information. Do not prescribe specialized agricultural "
+            "treatment."
+        ),
+        "commute_conditions": (
+            "Give practical weather-related commute preparation."
+        ),
+        "travel_conditions": (
+            "Give practical weather preparation for travel."
+        ),
+        "family_school": (
+            "Give simple preparation guidance for school or family outings."
+        ),
+        "event_conditions": (
+            "Give practical planning guidance for outdoor events."
         ),
     }
 
@@ -268,14 +506,174 @@ class LLMInsightService:
                 f"Extra: {sorted(extra_cards)}"
             )
 
-        return {
-            item["card"]: item["insight"]
-            for item in all_insights
-            if (
-                item["card"] in requested_cards
-                and item["insight"].strip()
-            )
+        verified_context_by_card = {
+            card["card"]: card["verified_data"]
+            for card in controlled_cards
         }
+
+        grounded_insights: dict[str, str] = {}
+
+        for item in all_insights:
+            card = item["card"]
+
+            if card not in requested_cards:
+                continue
+
+            insight = item["insight"].strip()
+
+            if not insight:
+                continue
+
+            verified_data = verified_context_by_card.get(
+                card,
+                {},
+            )
+
+            if self._contains_unsupported_classification(
+                insight=insight,
+                verified_data=verified_data,
+            ):
+                logger.warning(
+                    "Rejected unsupported LLM classification "
+                    "for card %s: %s",
+                    card,
+                    insight,
+                )
+
+                insight = self._build_factual_fallback(
+                    card=card,
+                    verified_data=verified_data,
+                )
+
+            grounded_insights[card] = insight
+
+        return grounded_insights
+
+    @staticmethod
+    def _build_recommendation(
+        *,
+        card: str,
+        weather_context: dict[str, Any],
+    ) -> str | None:
+
+        if card == "rain_forecast":
+            probability = weather_context.get(
+                "precipitation_probability"
+            )
+
+            if (
+                isinstance(probability, (int, float))
+                and probability >= 30
+            ):
+                return (
+                    "Keep rain protection available and "
+                    "keep outdoor plans flexible."
+                )
+
+            return None
+
+        if card == "humidity":
+            humidity = weather_context.get(
+                "relative_humidity_2m"
+            )
+
+            if (
+                isinstance(humidity, (int, float))
+                and humidity >= 80
+            ):
+                return (
+                    "For outdoor plans, breathable clothing "
+                    "and flexibility may improve comfort."
+                )
+
+            return None
+
+        if card == "temperature":
+            temperature = weather_context.get(
+                "temperature_2m"
+            )
+
+            if (
+                isinstance(temperature, (int, float))
+                and temperature >= 32
+            ):
+                return (
+                    "For longer outdoor plans, consider "
+                    "lighter clothing and cooler times of day."
+                )
+
+            if (
+                isinstance(temperature, (int, float))
+                and temperature <= 15
+            ):
+                return (
+                    "Consider carrying an extra layer for "
+                    "outdoor plans."
+                )
+
+            return None
+
+        if card == "surf_conditions":
+            return (
+                "Use the marine conditions as one part of "
+                "your planning and check local tide, currents, "
+                "beach hazards, and lifeguard information "
+                "before deciding to surf."
+            )
+
+        if card == "tide_water":
+            return (
+                "Use the sea conditions as planning context "
+                "and check local marine information before "
+                "water activities."
+            )
+
+        if card == "wind":
+            wind_speed = weather_context.get(
+                "wind_speed_10m"
+            )
+
+            if (
+                isinstance(wind_speed, (int, float))
+                and wind_speed >= 25
+            ):
+                return (
+                    "Account for wind when planning exposed "
+                    "outdoor activities and secure loose items."
+                )
+
+            return None
+
+        if card == "air_quality":
+            return (
+                "Use the air-quality reading when planning "
+                "long outdoor activities and check local "
+                "air-quality guidance if needed."
+            )
+
+        if card == "uv_allergy":
+            uv_index = weather_context.get(
+                "uv_index"
+            )
+
+            if (
+                isinstance(uv_index, (int, float))
+                and uv_index >= 3
+            ):
+                return (
+                    "Consider sun protection if you will be "
+                    "outdoors for an extended period."
+                )
+
+            return None
+
+        if card == "weather_conditions":
+            return (
+                "Keep outdoor plans flexible if weather "
+                "conditions change."
+            )
+
+        return None
 
 
     @classmethod
@@ -311,9 +709,174 @@ class LLMInsightService:
 
         for field in fields:
             if field in source and source[field] is not None:
-                verified_data[field] = source[field]
+                field_data: dict[str, Any] = {
+                    "value": source[field],
+                }
+
+                if field == "weather_code":
+                    try:
+                        weather_code = int(source[field])
+                    except (TypeError, ValueError):
+                        weather_code = None
+
+                    if weather_code is not None:
+                        description = (
+                            cls.WEATHER_CODE_DESCRIPTIONS.get(
+                                weather_code
+                            )
+                        )
+
+                        if description:
+                            field_data["interpretation"] = (
+                                description
+                            )
+
+                metadata = cls.FIELD_METADATA.get(
+                    field
+                )
+
+                if metadata:
+                    field_data.update(metadata)
+
+                verified_data[field] = field_data
+
+        guidance = cls.CARD_GUIDANCE.get(
+            card
+        )
+
+        if guidance:
+            verified_data["_guidance"] = guidance
+
+        recommendation = cls._build_recommendation(
+            card=card,
+            weather_context=source,
+        )
+
+        if recommendation:
+            verified_data[
+                "_recommendation"
+            ] = recommendation
 
         return verified_data
+
+    @classmethod
+    def _contains_unsupported_classification(
+        cls,
+        *,
+        insight: str,
+        verified_data: dict[str, Any],
+    ) -> bool:
+        normalized_insight = insight.lower()
+
+        allowed_interpretations: list[str] = []
+
+        for field_data in verified_data.values():
+            if not isinstance(field_data, dict):
+                continue
+
+            interpretation = field_data.get(
+                "interpretation"
+            )
+
+            if isinstance(interpretation, str):
+                allowed_interpretations.append(
+                    interpretation.lower()
+                )
+
+        interpretation_text = " ".join(
+            allowed_interpretations
+        )
+
+        for term in cls.UNSUPPORTED_CLASSIFICATION_TERMS:
+            if not re.search(
+                rf"\b{re.escape(term)}\b",
+                normalized_insight,
+            ):
+                continue
+
+            # The wording is allowed only when that exact
+            # classification was explicitly supplied by
+            # deterministic backend context.
+            if re.search(
+                rf"\b{re.escape(term)}\b",
+                interpretation_text,
+            ):
+                continue
+
+            return True
+
+        return False
+
+
+    @staticmethod
+    def _format_verified_measurement(
+        *,
+        field: str,
+        data: dict[str, Any],
+    ) -> str | None:
+        value = data.get("value")
+
+        if value is None:
+            return None
+
+        unit = data.get("unit")
+        meaning = data.get("meaning")
+
+        if field == "precipitation_probability":
+            if unit:
+                return (
+                    f"The chance of precipitation is "
+                    f"{value}{unit}."
+                )
+
+            return (
+                f"The chance of precipitation is {value}."
+            )
+
+        if not meaning:
+            return None
+
+        if unit:
+            return f"{meaning.capitalize()} is {value} {unit}."
+
+        return f"{meaning.capitalize()} is {value}."
+
+
+    @classmethod
+    def _build_factual_fallback(
+        cls,
+        *,
+        card: str,
+        verified_data: dict[str, Any],
+    ) -> str:
+        fields = cls.FALLBACK_FIELD_ORDER.get(
+            card,
+            (),
+        )
+
+        statements: list[str] = []
+
+        for field in fields:
+            data = verified_data.get(field)
+
+            if not isinstance(data, dict):
+                continue
+
+            statement = cls._format_verified_measurement(
+                field=field,
+                data=data,
+            )
+
+            if statement:
+                statements.append(statement)
+
+            if len(statements) == 2:
+                break
+
+        if statements:
+            return " ".join(statements)
+
+        return "No specific information is available."
 
     @staticmethod
     def _build_prompt(
@@ -389,7 +952,15 @@ STRICT RULES:
 16. Prefer useful interpretation over simply repeating numbers.
 17. When appropriate, answer the practical question:
     "What should the user do?"
-18. Use readable wording, but NEVER add or assume a measurement unit.
+18. Use readable wording. A measurement unit may be used only when that
+    exact unit is explicitly supplied in the verified field metadata.
+    Never invent or substitute a unit.
+
+18A. When an "interpretation" is explicitly supplied for a verified field,
+     you may use that interpretation exactly as provided. The interpretation
+     is deterministic backend context and must not be replaced with a stronger
+     or different classification.
+
 19. Avoid unnecessary decimal places.
 20. Use persona information only when it genuinely improves
     the recommendation.
@@ -435,6 +1006,21 @@ interpretation, do not guess. Return:
 The goal is NOT to repeat the raw weather values. The goal is to provide
 a concise interpretation only when that interpretation is directly
 supported by the supplied context.
+
+The special "_recommendation" field contains a deterministic,
+backend-approved practical suggestion.
+
+When "_recommendation" is present:
+
+- Base the insight primarily on that recommendation.
+- You may rewrite it naturally and concisely.
+- Do not strengthen, weaken, or materially change its meaning.
+- Do not create additional recommendations.
+- Do not introduce safety, suitability, health, agricultural,
+  or marine conclusions beyond that recommendation.
+
+When "_recommendation" is absent, provide a concise factual
+observation rather than inventing an action or classification.
 
 Example 1 — insufficient context:
 
@@ -483,9 +1069,41 @@ When information is insufficient for a supported interpretation, return:
 29. Keep each insight concise and suitable for direct display inside
     a weather card.
 
-30. Do not restate raw measurements from the card. The card already displays
-    the factual weather values. The insight must primarily provide a concise
-    interpretation or practical observation.
+30. The weather card already displays the raw measurement. Do not make the
+    insight primarily a repetition of that measurement.
+
+    The insight should primarily answer:
+    - What does this condition mean for the user?
+    - What practical action or preparation may be useful?
+
+    Mention a numeric measurement only when it materially helps explain the
+    recommendation.
+
+30A. Low-risk practical suggestions are allowed when they follow reasonably
+     from the supplied weather information.
+
+     Examples of acceptable general guidance include:
+     - carrying rain protection when precipitation is possible
+     - adjusting outdoor timing based on weather conditions
+     - choosing clothing appropriate for current temperature or humidity
+     - keeping outdoor plans flexible when weather may affect them
+     - checking local tide/current information before marine activities
+
+     Do not turn these suggestions into guarantees or safety claims.
+
+30B. Prefer a useful recommendation over simply repeating values.
+
+     Good:
+     "Keep rain protection handy if you're heading out."
+
+     Less useful:
+     "Precipitation probability is 47%."
+
+     Good:
+     "For outdoor plans, lighter breathable clothing may be more comfortable."
+
+     Less useful:
+     "Relative humidity is 89%."
 
 31. Never repeat a numeric weather value in the insight unless it is essential
     to answer the specific request.
@@ -568,9 +1186,11 @@ When information is insufficient for a supported interpretation, return:
 48. When information is incomplete, use the verified fields that are
     available and provide a useful neutral interpretation.
 
-49. If the available fields do not explicitly support a meaningful
-interpretation, return:
-    "No specific information is available."
+49. If verified measurements are available with explicit units or meanings,
+    provide a concise factual observation using those fields.
+
+    Return "No specific information is available." only when no usable
+    verified information for that card is supplied.
 
 50. Do not mention AI, LLMs, prompts, or the generation process.
 

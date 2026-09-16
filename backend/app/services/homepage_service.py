@@ -27,6 +27,9 @@ from app.schemas.weather import (
     WeatherContextResponse,
 )
 from app.services.alert_service import AlertService
+from app.services.llm_insight_service import (
+    LLMInsightService,
+)
 from app.services.my_day_service import MyDayService
 from app.services.personalization_service import (
     PersonalizationService,
@@ -61,6 +64,7 @@ class HomepageService:
         weather_context_service: WeatherContextService,
         alert_service: AlertService,
         personalization_provider: PersonalizationProvider,
+        llm_insight_service: LLMInsightService | None = None,
     ):
         self.location_repository = LocationRepository(session)
 
@@ -78,6 +82,7 @@ class HomepageService:
             session=session,
             weather_context_service=(weather_context_service),
             personalization_provider=(personalization_provider),
+            llm_insight_service=llm_insight_service,
         )
 
     async def _resolve_location(
