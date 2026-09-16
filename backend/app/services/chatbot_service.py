@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from redis.asyncio import Redis
 
@@ -12,11 +12,7 @@ class ChatbotService:
     MAX_QUESTIONS = 20
     COUNTER_TTL_SECONDS = 24 * 60 * 60
 
-    # ---------------------------------------------------------
-    # General Mausam / weather questions
-    # ---------------------------------------------------------
-
-    WEATHER_KEYWORDS = {
+    WEATHER_KEYWORDS: ClassVar[set[str]] = {
         "weather",
         "temperature",
         "rain",
@@ -74,11 +70,7 @@ class ChatbotService:
         "mausam",
     }
 
-    # ---------------------------------------------------------
-    # Mausam application questions
-    # ---------------------------------------------------------
-
-    APP_KEYWORDS = {
+    APP_KEYWORDS: ClassVar[set[str]] = {
         "app",
         "homepage",
         "personalization",
@@ -90,14 +82,9 @@ class ChatbotService:
         "mausam assistant",
     }
 
-    # ---------------------------------------------------------
-    # Activity / context intents
-    #
-    # The chatbot identifies the most relevant weather context
-    # before sending the question to the LLM.
-    # ---------------------------------------------------------
-
-    CONTEXT_KEYWORDS = {
+    CONTEXT_KEYWORDS: ClassVar[
+        dict[str, set[str]]
+    ] = {
         "running_conditions": {
             "run",
             "running",
@@ -203,14 +190,12 @@ class ChatbotService:
         if not question:
             raise ValueError("Question cannot be empty")
 
-        # -----------------------------------------------------
-        # Detect whether this is a Mausam-related question.
-        # -----------------------------------------------------
-
         if not self._is_mausam_related(question):
             return (
-                "Please ask a question related to Mausam, weather, "
-                "or the Mausam app.",
+                (
+                    "Please ask a question related to Mausam, weather, "
+                "or the Mausam app."
+                ),
                 0,
                 self.MAX_QUESTIONS,
             )
@@ -236,8 +221,10 @@ class ChatbotService:
 
         if count > self.MAX_QUESTIONS:
             return (
-                "You have reached the 20-question limit for this "
-                "chatbot session. Please start a new session.",
+                (
+                    "You have reached the 20-question limit for this "
+                "chatbot session. Please start a new session."
+                ),
                 self.MAX_QUESTIONS,
                 0,
             )
@@ -272,7 +259,7 @@ class ChatbotService:
 
             answer = answer.strip()
 
-        except Exception as exc:
+        except Exception as exc:   # noqa: BLE001
             print(
                 f"\n[CHATBOT LLM ERROR] "
                 f"{type(exc).__name__}: {exc}\n"
@@ -288,10 +275,6 @@ class ChatbotService:
             count,
             self.MAX_QUESTIONS - count,
         )
-
-    # =========================================================
-    # Intent / Context Detection
-    # =========================================================
 
     @classmethod
     def _is_mausam_related(cls, question: str) -> bool:
@@ -310,13 +293,10 @@ class ChatbotService:
                 return True
 
         # Application-specific questions.
-        if any(
+        return any(
             keyword in normalized
             for keyword in cls.APP_KEYWORDS
-        ):
-            return True
-
-        return False
+        )
 
     @classmethod
     def _detect_context(cls, question: str) -> str:
@@ -333,9 +313,15 @@ class ChatbotService:
         # Otherwise classify as general weather.
         return "general_weather"
 
-    # =========================================================
-    # Prompt Construction
-    # =========================================================
+    @classmethod
+    def requires_marine_context(
+        cls,
+        question: str,
+    ) -> bool:
+        return (
+            cls._detect_context(question)
+            == "surf_conditions"
+        )
 
     @classmethod
     def _build_prompt(
@@ -390,8 +376,19 @@ class ChatbotService:
             ),
             "surf_conditions": (
                 "The user is asking about surfing or sea conditions. "
-                "Use supplied wave and sea information when available. "
-                "Do not invent wave height, wave period, tide, or ocean data."
+                "Report relevant verified wave, swell, sea-temperature, wind, "
+                "precipitation, and daylight values exactly as supplied. "
+                "Do not classify any numeric value using words such as minimal, "
+                "light, strong, mild, rough, calm, high, or low unless an explicit "
+                "classification threshold is supplied. "
+                "If is_daylight is false, state only that it is currently nighttime "
+                "or outside daylight hours. Do not infer that surfing is advised, "
+                "not advised, safe, unsafe, suitable, or unsuitable from daylight. "
+                "Do not make a surfing recommendation from the supplied measurements. "
+                "If the user asks whether they should surf, summarize the verified "
+                "conditions and explain that suitability cannot be determined from "
+                "weather data alone because local currents, tide timing, beach "
+                "hazards, and lifeguard conditions are not supplied."
             ),
             "event_conditions": (
                 "The user is asking about an event or outdoor activity. "
@@ -442,7 +439,16 @@ Use human-friendly units and wording when the units are known.
 . Do not mention whether an AQI value is US AQI or European AQI unless the user explicitly asks about the AQI standard.
 9. For activity questions, provide a conservative weather-based assessment.
 10. Do not provide medical diagnoses or unsupported health/safety claims.
-11. Give a clear, conversational answer in approximately 3–5 sentences.
+11. Do not assign a unit to a numeric value unless that unit is explicitly
+known from the supplied context.
+
+12. Do not convert a raw numeric measurement into qualitative terms such as
+"light", "strong", "mild", "rough", "high", or "low" unless an explicit
+threshold is supplied.
+
+13. Do not recommend specific safety equipment or techniques unless that
+information is explicitly part of the supplied Mausam data.
+14. Give a clear, conversational answer in approximately 3–5 sentences.
 
 For weather questions where sufficient verified information is available,
 do not answer with only a list of measurements. Explain the answer first,
@@ -463,7 +469,7 @@ the user's question. Do not list or mention unrelated missing measurements.
 If the specific information requested by the user is unavailable, say so
 clearly rather than guessing.
 
-12. Return valid JSON matching the requested schema.
+15. Return valid JSON matching the requested schema.
 
 Do not make recommendations from unlabeled numeric measurements.
 
@@ -493,10 +499,6 @@ Return exactly:
     "answer": "your concise answer"
 }}
 """.strip()
-
-    # =========================================================
-    # Weather Context Serialization
-    # =========================================================
 
     @staticmethod
     def _weather_context_to_dict(
@@ -529,24 +531,66 @@ Return exactly:
         if current is not None:
             current_data = result["current"]
 
-            for field in (
-                "temperature",
-                "apparent_temperature",
-                "humidity",
-                "precipitation",
-                "rain",
-                "rain_probability",
-                "weather_code",
-                "wind_speed",
-                "visibility",
-                "is_daylight",
-                "uv_index",
-            ):
-                if hasattr(current, field):
-                    value = getattr(current, field)
+            if current.temperature is not None:
+                current_data["temperature_c"] = (
+                    current.temperature
+                )
 
-                    if value is not None:
-                        current_data[field] = value
+            if current.apparent_temperature is not None:
+                current_data[
+                    "apparent_temperature_c"
+                ] = current.apparent_temperature
+
+            if current.humidity is not None:
+                current_data["humidity_percent"] = (
+                    current.humidity
+                )
+
+            if current.precipitation is not None:
+                current_data["precipitation_mm"] = (
+                    current.precipitation
+                )
+
+            if current.rain is not None:
+                current_data["rain_mm"] = (
+                    current.rain
+                )
+
+            if current.rain_probability is not None:
+                current_data[
+                    "precipitation_probability_percent"
+                ] = current.rain_probability
+
+            if current.weather_code is not None:
+                current_data["weather_code"] = (
+                    current.weather_code
+                )
+
+            if current.wind_speed is not None:
+                current_data["wind_speed_kmh"] = (
+                    current.wind_speed
+                )
+
+            if current.visibility is not None:
+                current_data["visibility_m"] = (
+                    current.visibility
+                )
+
+            if current.is_daylight is not None:
+                current_data["is_daylight"] = (
+                    current.is_daylight
+                )
+
+            current_uv_index = getattr(
+                current,
+                "uv_index",
+                None,
+            )
+
+            if current_uv_index is not None:
+                current_data["uv_index"] = (
+                    current_uv_index
+                )
 
         air_quality = getattr(
             weather_context,
@@ -555,27 +599,83 @@ Return exactly:
         )
 
         if air_quality is not None:
-            air_quality_data = {}
+            air_quality_data: dict[str, Any] = {}
 
             for field in (
                 "aqi",
                 "us_aqi",
                 "uv_index",
             ):
-                if hasattr(air_quality, field):
-                    value = getattr(air_quality, field)
+                value = getattr(
+                    air_quality,
+                    field,
+                    None,
+                )
 
-                    if value is not None:
-                        air_quality_data[field] = value
+                if value is not None:
+                    air_quality_data[field] = value
 
             if air_quality_data:
-                result["air_quality"] = air_quality_data
+                result["air_quality"] = (
+                    air_quality_data
+                )
+
+        marine = getattr(
+            weather_context,
+            "marine",
+            None,
+        )
+
+        if (
+            marine is not None
+            and marine.available
+        ):
+            marine_data: dict[str, Any] = {}
+
+            if marine.wave_height is not None:
+                marine_data["wave_height_m"] = (
+                    marine.wave_height
+                )
+
+            if marine.wave_direction is not None:
+                marine_data[
+                    "wave_direction_degrees"
+                ] = marine.wave_direction
+
+            if marine.wave_period is not None:
+                marine_data[
+                    "wave_period_seconds"
+                ] = marine.wave_period
+
+            if marine.swell_wave_height is not None:
+                marine_data[
+                    "swell_wave_height_m"
+                ] = marine.swell_wave_height
+
+            if marine.swell_wave_direction is not None:
+                marine_data[
+                    "swell_wave_direction_degrees"
+                ] = marine.swell_wave_direction
+
+            if marine.swell_wave_period is not None:
+                marine_data[
+                    "swell_wave_period_seconds"
+                ] = marine.swell_wave_period
+
+            if marine.sea_level_height_msl is not None:
+                marine_data[
+                    "sea_level_height_msl_m"
+                ] = marine.sea_level_height_msl
+
+            if marine.sea_surface_temperature is not None:
+                marine_data[
+                    "sea_surface_temperature_c"
+                ] = marine.sea_surface_temperature
+
+            if marine_data:
+                result["marine"] = marine_data
 
         return result
-
-    # =========================================================
-    # Deterministic Fallback
-    # =========================================================
 
     @classmethod
     def _deterministic_fallback(
@@ -597,10 +697,6 @@ Return exactly:
 
         normalized = question.lower()
         current = weather_context.current
-
-        # -----------------------------------------------------
-        # Activity-specific fallbacks
-        # -----------------------------------------------------
 
         if context == "running_conditions":
 
@@ -762,10 +858,6 @@ Return exactly:
                 "not available right now."
             )
 
-        # -----------------------------------------------------
-        # General weather fallbacks
-        # -----------------------------------------------------
-
         if "temperature" in normalized:
             if current.temperature is not None:
                 return (
@@ -869,12 +961,17 @@ Return exactly:
                     f"{air_quality.uv_index}."
                 )
 
-            if hasattr(current, "uv_index"):
-                if current.uv_index is not None:
-                    return (
-                        f"The current UV index is "
-                        f"{current.uv_index}."
-                    )
+            uv_index = getattr(
+                current,
+                "uv_index",
+                None,
+            )
+
+            if uv_index is not None:
+                return (
+                    f"The current UV index is "
+                    f"{uv_index}."
+                )
 
             return (
                 "The current UV index is not available."

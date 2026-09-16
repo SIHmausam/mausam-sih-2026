@@ -7,6 +7,7 @@ from app.core.redis import get_redis
 from app.dependencies.auth import get_current_user
 from app.dependencies.providers import (
     get_air_quality_provider,
+    get_marine_provider,
     get_weather_provider,
 )
 from app.integrations.air_quality.open_meteo import (
@@ -15,6 +16,9 @@ from app.integrations.air_quality.open_meteo import (
 from app.integrations.llm.gemini_client import GeminiClient
 from app.integrations.llm.groq_client import GroqClient
 from app.integrations.llm.llm_provider import FallbackLLMProvider
+from app.integrations.marine.open_meteo import (
+    OpenMeteoMarineProvider,
+)
 from app.integrations.weather.open_meteo import (
     OpenMeteoWeatherProvider,
 )
@@ -29,13 +33,15 @@ from app.services.air_quality_service import (
 from app.services.chatbot_service import (
     ChatbotService,
 )
+from app.services.marine_service import (
+    MarineService,
+)
 from app.services.weather_context_service import (
     WeatherContextService,
 )
 from app.services.weather_service import (
     WeatherService,
 )
-
 
 router = APIRouter(
     prefix="/chatbot",
@@ -65,6 +71,10 @@ async def ask_chatbot(
         OpenMeteoAirQualityProvider,
         Depends(get_air_quality_provider),
     ],
+    marine_provider: Annotated[
+        OpenMeteoMarineProvider,
+        Depends(get_marine_provider),
+    ],
 ):
     if (payload.latitude is None) != (
         payload.longitude is None
@@ -92,9 +102,15 @@ async def ask_chatbot(
             redis=redis,
         )
 
+        marine_service = MarineService(
+            provider=marine_provider,
+            redis=redis,
+        )
+
         context_service = WeatherContextService(
             weather_service=weather_service,
             air_quality_service=air_quality_service,
+            marine_service=marine_service,
         )
 
         try:
@@ -102,7 +118,19 @@ async def ask_chatbot(
                 payload.latitude,
                 payload.longitude,
             )
-        except Exception:
+
+            if ChatbotService.requires_marine_context(
+                payload.question
+            ):
+                weather_context = (
+                    await context_service.attach_marine_context(
+                        context=weather_context,
+                        latitude=payload.latitude,
+                        longitude=payload.longitude,
+                    )
+                )
+                
+        except Exception:  # noqa: BLE001
             weather_context = None
 
     try:
@@ -122,8 +150,8 @@ async def ask_chatbot(
 
         (
             answer,
-            questions_used,
-            questions_remaining,
+            _questions_used,
+            _questions_remaining,
         ) = await service.ask(
             user_id=str(current_user.id),
             session_id=payload.session_id,

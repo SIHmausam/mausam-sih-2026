@@ -1,10 +1,10 @@
 import asyncio
 
-from app.integrations.llm.groq_client import GroqClient
 from app.integrations.llm.gemini_client import GeminiClient
+from app.integrations.llm.groq_client import GroqClient
 from app.integrations.llm.llm_provider import FallbackLLMProvider
-from app.services.chatbot_service import ChatbotService
 from app.schemas.weather import WeatherContextResponse
+from app.services.chatbot_service import ChatbotService
 
 
 class FakeRedis:

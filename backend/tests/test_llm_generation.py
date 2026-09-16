@@ -8,7 +8,6 @@ from app.integrations.llm.groq_client import GroqClient
 from app.integrations.llm.llm_provider import FallbackLLMProvider
 from app.services.llm_insight_service import LLMInsightService
 
-
 load_dotenv()
 
 

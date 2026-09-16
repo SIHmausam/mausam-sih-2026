@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-
 load_dotenv(".env")
 
 
@@ -66,7 +65,7 @@ class GeminiClient:
                 timeout=self.timeout,
             )
 
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise GeminiClientError(
                 "Gemini request timed out"
             ) from exc

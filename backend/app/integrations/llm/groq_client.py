@@ -79,7 +79,7 @@ class GroqClient:
                 timeout=self.timeout,
             )
 
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise GroqClientError(
                 "Groq request timed out"
             ) from exc
