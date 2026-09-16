@@ -107,5 +107,17 @@ class Settings(BaseSettings):
 
     notification_routine_reminder_lead_minutes: int = 30
 
+    llm_enabled: bool = False
+
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    llm_request_timeout_seconds: float = 10.0
+
+    groq_api_key: str | None = None
+    groq_model: str = "openai/gpt-oss-20b"
+    groq_request_timeout_seconds: float = 30.0
+
+    llm_insight_cache_ttl_seconds: int = 1800
+
 
 settings = Settings()

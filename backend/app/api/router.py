@@ -7,6 +7,9 @@ from app.api.routes.alerts import (
     router as alerts_router,
 )
 from app.api.routes.auth import router as auth_router
+from app.api.routes.chatbot import (
+    router as chatbot_router,
+)
 from app.api.routes.devices import (
     router as devices_router,
 )
@@ -47,3 +50,4 @@ api_router.include_router(homepage_router)
 api_router.include_router(personalization_router)
 api_router.include_router(notifications_router)
 api_router.include_router(devices_router)
+api_router.include_router(chatbot_router)
