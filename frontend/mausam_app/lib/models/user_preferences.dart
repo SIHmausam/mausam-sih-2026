@@ -47,7 +47,8 @@ class PersonalizationSettings {
 class UserPreferences {
   final String? preferredLanguage;
   final String? temperatureUnit;
-  final String? persona;
+  final List<String> personas;
+  final String? primaryPersona;
   final int? preferredStartHour;
   final int? preferredEndHour;
   final List<String> interests;
@@ -59,7 +60,8 @@ class UserPreferences {
   const UserPreferences({
     required this.preferredLanguage,
     required this.temperatureUnit,
-    required this.persona,
+    required this.personas,
+    required this.primaryPersona,
     required this.preferredStartHour,
     required this.preferredEndHour,
     required this.interests,
@@ -69,11 +71,23 @@ class UserPreferences {
     required this.onboardingCompleted,
   });
 
+  String? get persona => primaryPersona;
+
   factory UserPreferences.fromJson(Map<String, dynamic> json) {
+    final legacyPersona = json['persona']?.toString();
+    final parsedPersonas = (json['personas'] as List<dynamic>? ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    final parsedPrimaryPersona =
+        json['primary_persona']?.toString() ?? legacyPersona;
+
     return UserPreferences(
       preferredLanguage: json['preferred_language']?.toString(),
       temperatureUnit: json['temperature_unit']?.toString(),
-      persona: json['persona']?.toString(),
+      personas: parsedPersonas.isNotEmpty
+          ? parsedPersonas
+          : (legacyPersona == null ? const [] : [legacyPersona]),
+      primaryPersona: parsedPrimaryPersona,
       preferredStartHour: (json['preferred_start_hour'] as num?)?.toInt(),
       preferredEndHour: (json['preferred_end_hour'] as num?)?.toInt(),
       interests: (json['interests'] as List<dynamic>? ?? const [])

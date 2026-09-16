@@ -9,6 +9,11 @@ class HourlyWeather {
   final int weatherCode;
   final double windSpeed;
   final double visibility;
+  final double dewPoint;
+  final double showers;
+  final double cloudCover;
+  final double windDirection;
+  final double windGusts;
 
   const HourlyWeather({
     required this.time,
@@ -21,6 +26,11 @@ class HourlyWeather {
     required this.weatherCode,
     required this.windSpeed,
     required this.visibility,
+    this.dewPoint = 0,
+    this.showers = 0,
+    this.cloudCover = 0,
+    this.windDirection = 0,
+    this.windGusts = 0,
   });
 }
 
@@ -37,6 +47,7 @@ class DailyWeather {
   final double rainSum;
   final double rainProbabilityMax;
   final double windSpeedMax;
+  final double precipitationHours;
 
   const DailyWeather({
     required this.date,
@@ -51,6 +62,7 @@ class DailyWeather {
     required this.rainSum,
     required this.rainProbabilityMax,
     required this.windSpeedMax,
+    this.precipitationHours = 0,
   });
 }
 
@@ -66,14 +78,32 @@ class WeatherData {
   final double rain;
   final int weatherCode;
   final double windSpeed;
+  final double dewPoint;
+  final double showers;
+  final double rainProbability;
+  final double cloudCover;
+  final double windDirection;
+  final double windGusts;
+  final double visibility;
 
   // Agriculture
   final double? soilMoisture;
+  final double? soilMoisture7To28cm;
+  final double? soilMoisture28To100cm;
+  final double? soilMoisture100To255cm;
+  final double? soilTemperature0To7cm;
+  final double? soilTemperature7To28cm;
+  final double? soilTemperature28To100cm;
+  final double? soilTemperature100To255cm;
+  final double? evapotranspiration;
+  final double? vapourPressureDeficit;
 
   // Air quality
   final double usAqi;
   final double europeanAqi;
+  final String? aqiStandard;
   final double uvIndex;
+  final double uvIndexClearSky;
   final double pm25;
   final double pm10;
   final double? nitrogenDioxide;
@@ -82,6 +112,16 @@ class WeatherData {
   final double? ozone;
 
   final bool isDaylight;
+
+  // Marine
+  final double? waveHeight;
+  final double? waveDirection;
+  final double? wavePeriod;
+  final double? swellWaveHeight;
+  final double? swellWaveDirection;
+  final double? swellWavePeriod;
+  final double? seaLevelHeightMsl;
+  final double? seaSurfaceTemperature;
 
   // Forecast
   final List<HourlyWeather> hourly;
@@ -108,6 +148,32 @@ class WeatherData {
     this.carbonMonoxide,
     this.ozone,
     required this.isDaylight,
+    this.dewPoint = 0,
+    this.showers = 0,
+    this.rainProbability = 0,
+    this.cloudCover = 0,
+    this.windDirection = 0,
+    this.windGusts = 0,
+    this.visibility = 0,
+    this.soilMoisture7To28cm,
+    this.soilMoisture28To100cm,
+    this.soilMoisture100To255cm,
+    this.soilTemperature0To7cm,
+    this.soilTemperature7To28cm,
+    this.soilTemperature28To100cm,
+    this.soilTemperature100To255cm,
+    this.evapotranspiration,
+    this.vapourPressureDeficit,
+    this.aqiStandard,
+    this.uvIndexClearSky = 0,
+    this.waveHeight,
+    this.waveDirection,
+    this.wavePeriod,
+    this.swellWaveHeight,
+    this.swellWaveDirection,
+    this.swellWavePeriod,
+    this.seaLevelHeightMsl,
+    this.seaSurfaceTemperature,
     this.hourly = const [],
     this.daily = const [],
   });

@@ -62,12 +62,46 @@ class WeatherApiService {
       rain: _toDouble(current['rain']),
       weatherCode: _toInt(current['weather_code']),
       windSpeed: _toDouble(current['wind_speed']),
+      dewPoint: _toDoubleOrZero(current['dew_point']),
+      showers: _toDoubleOrZero(current['showers']),
+      rainProbability: _toDoubleOrZero(current['rain_probability']),
+      cloudCover: _toDoubleOrZero(current['cloud_cover']),
+      windDirection: _toDoubleOrZero(current['wind_direction']),
+      windGusts: _toDoubleOrZero(current['wind_gusts']),
+      visibility: _toDoubleOrZero(current['visibility']),
 
       soilMoisture: agriculture == null
           ? null
           : _toDoubleOrNull(
               agriculture['surface_soil_moisture'],
             ),
+      soilMoisture7To28cm: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['soil_moisture_7_to_28cm']),
+      soilMoisture28To100cm: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['soil_moisture_28_to_100cm']),
+      soilMoisture100To255cm: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['soil_moisture_100_to_255cm']),
+      soilTemperature0To7cm: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['soil_temperature_0_to_7cm']),
+      soilTemperature7To28cm: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['soil_temperature_7_to_28cm']),
+      soilTemperature28To100cm: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['soil_temperature_28_to_100cm']),
+      soilTemperature100To255cm: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['soil_temperature_100_to_255cm']),
+      evapotranspiration: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['evapotranspiration']),
+      vapourPressureDeficit: agriculture == null
+          ? null
+          : _toDoubleOrNull(agriculture['vapour_pressure_deficit']),
 
       usAqi: airQuality == null
           ? 0
@@ -75,9 +109,13 @@ class WeatherApiService {
       europeanAqi: airQuality == null
           ? 0
           : _toDouble(airQuality['european_aqi']),
+      aqiStandard: airQuality?['aqi_standard']?.toString(),
       uvIndex: airQuality == null
           ? 0
           : _toDouble(airQuality['uv_index']),
+      uvIndexClearSky: airQuality == null
+          ? 0
+          : _toDouble(airQuality['uv_index_clear_sky']),
       pm25: airQuality == null
           ? 0
           : _toDouble(airQuality['pm2_5']),
@@ -108,6 +146,15 @@ class WeatherApiService {
 
       isDaylight: current['is_daylight'] == true,
 
+      waveHeight: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['wave_height']),
+      waveDirection: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['wave_direction']),
+      wavePeriod: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['wave_period']),
+      swellWaveHeight: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['swell_wave_height']),
+      swellWaveDirection: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['swell_wave_direction']),
+      swellWavePeriod: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['swell_wave_period']),
+      seaLevelHeightMsl: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['sea_level_height_msl']),
+      seaSurfaceTemperature: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['sea_surface_temperature']),
+
       hourly: hourly,
       daily: daily,
     );
@@ -135,6 +182,11 @@ class WeatherApiService {
             weatherCode: _toIntOrZero(item['weather_code']),
             windSpeed: _toDoubleOrZero(item['wind_speed']),
             visibility: _toDoubleOrZero(item['visibility']),
+            dewPoint: _toDoubleOrZero(item['dew_point']),
+            showers: _toDoubleOrZero(item['showers']),
+            cloudCover: _toDoubleOrZero(item['cloud_cover']),
+            windDirection: _toDoubleOrZero(item['wind_direction']),
+            windGusts: _toDoubleOrZero(item['wind_gusts']),
           ),
         )
         .toList();
@@ -174,6 +226,8 @@ class WeatherApiService {
             ),
             windSpeedMax:
                 _toDoubleOrZero(item['wind_speed_max']),
+            precipitationHours:
+                _toDoubleOrZero(item['precipitation_hours']),
           ),
         )
         .toList();
