@@ -10,11 +10,13 @@ from redis.asyncio import Redis
 from app.core.redis import get_redis
 from app.dependencies.providers import (
     get_air_quality_provider,
+    get_marine_provider,
     get_weather_provider,
 )
 from app.integrations.air_quality.open_meteo import (
     OpenMeteoAirQualityProvider,
 )
+from app.integrations.marine.base import MarineProvider
 from app.integrations.weather.open_meteo import (
     OpenMeteoWeatherProvider,
 )
@@ -28,6 +30,7 @@ from app.schemas.weather import (
 from app.services.air_quality_service import (
     AirQualityService,
 )
+from app.services.marine_service import MarineService
 from app.services.weather_context_service import (
     WeatherContextService,
 )
@@ -196,6 +199,14 @@ async def get_weather_context(
         OpenMeteoAirQualityProvider,
         Depends(get_air_quality_provider),
     ],
+    marine_provider: Annotated[
+        MarineProvider,
+        Depends(get_marine_provider),
+    ],
+    include_marine: Annotated[
+        bool,
+        Query(),
+    ] = False,
 ):
     weather_service = WeatherService(
         provider=weather_provider,
@@ -207,12 +218,27 @@ async def get_weather_context(
         redis=redis,
     )
 
+    marine_service = MarineService(
+        provider=marine_provider,
+        redis=redis,
+    )
+
     context_service = WeatherContextService(
         weather_service=weather_service,
         air_quality_service=air_quality_service,
+        marine_service=marine_service,
     )
 
-    return await context_service.get_context(
-        latitude,
-        longitude,
+    context = await context_service.get_context(
+        latitude=latitude,
+        longitude=longitude,
     )
+
+    if include_marine:
+        context = await context_service.attach_marine_context(
+            context=context,
+            latitude=latitude,
+            longitude=longitude,
+        )
+
+    return context
