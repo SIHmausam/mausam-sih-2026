@@ -1,5 +1,6 @@
 import logging
 import uuid
+from typing import Any
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -35,11 +36,15 @@ from app.schemas.personalization import (
 from app.schemas.weather import (
     WeatherContextResponse,
 )
+from app.services.llm_insight_service import (
+    LLMInsightService,
+)
 from app.services.weather_context_service import (
     WeatherContextService,
 )
 
 logger = logging.getLogger(__name__)
+
 class PersonalizationPreferencesNotFoundError(Exception):
     pass
 
@@ -58,6 +63,7 @@ class PersonalizationService:
         session: AsyncSession,
         weather_context_service: (WeatherContextService),
         personalization_provider: (PersonalizationProvider),
+        llm_insight_service: LLMInsightService | None = None,
     ):
         self.preference_repository = PreferenceRepository(session)
 
@@ -66,6 +72,8 @@ class PersonalizationService:
         self.weather_context_service = weather_context_service
 
         self.personalization_provider = personalization_provider
+
+        self.llm_insight_service = llm_insight_service
 
     async def _resolve_location(
         self,
@@ -232,8 +240,15 @@ class PersonalizationService:
                 cards=build_fallback_ranking(persona),
             )
 
+        llm_insights = await self._generate_llm_insights(
+            ml_cards=ml_response.cards,
+            weather=ml_request.weather,
+            personas=list(ml_request.personas),
+        )
+
         cards = self._translate_ml_cards(
-            ml_response.cards
+            ml_response.cards,
+            llm_insights=llm_insights,
         )
 
         return PersonalizationResult(
@@ -360,9 +375,52 @@ class PersonalizationService:
             )
         )
 
+    async def _generate_llm_insights(
+        self,
+        *,
+        ml_cards,
+        weather,
+        personas: list[str],
+    ) -> dict[str, str]:
+        if self.llm_insight_service is None:
+            return {}
+
+        cards = [
+            {
+                "card": item.card,
+                "rank": item.rank,
+                "score": item.score,
+            }
+            for item in ml_cards
+        ]
+
+        weather_context: dict[str, Any] = (
+            weather.model_dump(
+                mode="python",
+                exclude_none=True,
+            )
+        )
+
+        try:
+            return await self.llm_insight_service.generate_insights(
+                cards=cards,
+                weather_context=weather_context,
+                persona_context={
+                    "personas": personas,
+                },
+            )
+
+        except Exception:
+            logger.exception(
+                "LLM insight generation failed; "
+                "using deterministic ML insights"
+            )
+            return {}
+
     @staticmethod
     def _translate_ml_cards(
         ml_cards,
+        llm_insights: dict[str, str] | None = None,
     ) -> list[PersonalizedCard]:
         """
         Convert Phase 2 canonical ML cards into
@@ -370,6 +428,8 @@ class PersonalizationService:
 
         Unknown future ML card types are ignored safely.
         """
+
+        llm_insights = llm_insights or {}
 
         translated: list[
             PersonalizedCard
@@ -402,7 +462,10 @@ class PersonalizationService:
 
                     score=item.score,
 
-                    insight=item.insight,
+                    insight=(
+                        llm_insights.get(item.card)
+                        or item.insight
+                    ),
                 )
             )
 
