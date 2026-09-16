@@ -51,7 +51,7 @@ class FallbackLLMProvider:
                 response_schema=response_schema,
             )
 
-        except Exception as primary_error:
+        except Exception as primary_error:  # noqa: BLE001
 
             try:
                 return await self.secondary.generate_json(

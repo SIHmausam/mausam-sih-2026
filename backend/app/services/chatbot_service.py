@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from redis.asyncio import Redis
 
@@ -12,11 +12,7 @@ class ChatbotService:
     MAX_QUESTIONS = 20
     COUNTER_TTL_SECONDS = 24 * 60 * 60
 
-    # ---------------------------------------------------------
-    # General Mausam / weather questions
-    # ---------------------------------------------------------
-
-    WEATHER_KEYWORDS = {
+    WEATHER_KEYWORDS: ClassVar[set[str]] = {
         "weather",
         "temperature",
         "rain",
@@ -74,11 +70,7 @@ class ChatbotService:
         "mausam",
     }
 
-    # ---------------------------------------------------------
-    # Mausam application questions
-    # ---------------------------------------------------------
-
-    APP_KEYWORDS = {
+    APP_KEYWORDS: ClassVar[set[str]] = {
         "app",
         "homepage",
         "personalization",
@@ -90,14 +82,9 @@ class ChatbotService:
         "mausam assistant",
     }
 
-    # ---------------------------------------------------------
-    # Activity / context intents
-    #
-    # The chatbot identifies the most relevant weather context
-    # before sending the question to the LLM.
-    # ---------------------------------------------------------
-
-    CONTEXT_KEYWORDS = {
+    CONTEXT_KEYWORDS: ClassVar[
+        dict[str, set[str]]
+    ] = {
         "running_conditions": {
             "run",
             "running",
@@ -203,14 +190,12 @@ class ChatbotService:
         if not question:
             raise ValueError("Question cannot be empty")
 
-        # -----------------------------------------------------
-        # Detect whether this is a Mausam-related question.
-        # -----------------------------------------------------
-
         if not self._is_mausam_related(question):
             return (
-                "Please ask a question related to Mausam, weather, "
-                "or the Mausam app.",
+                (
+                    "Please ask a question related to Mausam, weather, "
+                "or the Mausam app."
+                ),
                 0,
                 self.MAX_QUESTIONS,
             )
@@ -236,8 +221,10 @@ class ChatbotService:
 
         if count > self.MAX_QUESTIONS:
             return (
-                "You have reached the 20-question limit for this "
-                "chatbot session. Please start a new session.",
+                (
+                    "You have reached the 20-question limit for this "
+                "chatbot session. Please start a new session."
+                ),
                 self.MAX_QUESTIONS,
                 0,
             )
@@ -272,7 +259,7 @@ class ChatbotService:
 
             answer = answer.strip()
 
-        except Exception as exc:
+        except Exception as exc:   # noqa: BLE001
             print(
                 f"\n[CHATBOT LLM ERROR] "
                 f"{type(exc).__name__}: {exc}\n"
@@ -288,10 +275,6 @@ class ChatbotService:
             count,
             self.MAX_QUESTIONS - count,
         )
-
-    # =========================================================
-    # Intent / Context Detection
-    # =========================================================
 
     @classmethod
     def _is_mausam_related(cls, question: str) -> bool:
@@ -310,13 +293,10 @@ class ChatbotService:
                 return True
 
         # Application-specific questions.
-        if any(
+        return any(
             keyword in normalized
             for keyword in cls.APP_KEYWORDS
-        ):
-            return True
-
-        return False
+        )
 
     @classmethod
     def _detect_context(cls, question: str) -> str:
@@ -332,10 +312,6 @@ class ChatbotService:
 
         # Otherwise classify as general weather.
         return "general_weather"
-
-    # =========================================================
-    # Prompt Construction
-    # =========================================================
 
     @classmethod
     def _build_prompt(
@@ -494,10 +470,6 @@ Return exactly:
 }}
 """.strip()
 
-    # =========================================================
-    # Weather Context Serialization
-    # =========================================================
-
     @staticmethod
     def _weather_context_to_dict(
         weather_context: WeatherContextResponse | None,
@@ -573,10 +545,6 @@ Return exactly:
 
         return result
 
-    # =========================================================
-    # Deterministic Fallback
-    # =========================================================
-
     @classmethod
     def _deterministic_fallback(
         cls,
@@ -597,10 +565,6 @@ Return exactly:
 
         normalized = question.lower()
         current = weather_context.current
-
-        # -----------------------------------------------------
-        # Activity-specific fallbacks
-        # -----------------------------------------------------
 
         if context == "running_conditions":
 
@@ -762,10 +726,6 @@ Return exactly:
                 "not available right now."
             )
 
-        # -----------------------------------------------------
-        # General weather fallbacks
-        # -----------------------------------------------------
-
         if "temperature" in normalized:
             if current.temperature is not None:
                 return (
@@ -869,12 +829,17 @@ Return exactly:
                     f"{air_quality.uv_index}."
                 )
 
-            if hasattr(current, "uv_index"):
-                if current.uv_index is not None:
-                    return (
-                        f"The current UV index is "
-                        f"{current.uv_index}."
-                    )
+            uv_index = getattr(
+                current,
+                "uv_index",
+                None,
+            )
+
+            if uv_index is not None:
+                return (
+                    f"The current UV index is "
+                    f"{uv_index}."
+                )
 
             return (
                 "The current UV index is not available."

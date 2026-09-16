@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
-
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 from app.schemas.llm import LLMInsightResponse
+
 
 class LLMClient(Protocol):
     async def generate_json(
@@ -39,7 +39,9 @@ class LLMInsightService:
 
     # Exact card -> verified weather fields used by the
     # existing Phase 2 deterministic insight system.
-    CARD_FIELDS: dict[str, tuple[str, ...]] = {
+    CARD_FIELDS: ClassVar[
+        dict[str, tuple[str, ...]]
+    ] = {
         "temperature": (
             "temperature_2m",
         ),
@@ -238,7 +240,7 @@ class LLMInsightService:
                     if item.insight.strip()
                 )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             import traceback
 
             print("\nLLM INSIGHT ERROR:")
@@ -295,16 +297,6 @@ class LLMInsightService:
         if not fields:
             return {}
 
-        # The Phase 2 weather contract contains raw weather
-        # features. We support both:
-        #
-        #   {"temperature_2m": ...}
-        #
-        # and a nested:
-        #
-        #   {"current": {"temperature_2m": ...}}
-        #
-        # without inventing any values.
         source = weather_context
 
         current = weather_context.get("current")

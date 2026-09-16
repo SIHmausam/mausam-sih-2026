@@ -36,7 +36,6 @@ from app.services.weather_service import (
     WeatherService,
 )
 
-
 router = APIRouter(
     prefix="/chatbot",
     tags=["Chatbot"],
@@ -102,7 +101,7 @@ async def ask_chatbot(
                 payload.latitude,
                 payload.longitude,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             weather_context = None
 
     try:
@@ -122,8 +121,8 @@ async def ask_chatbot(
 
         (
             answer,
-            questions_used,
-            questions_remaining,
+            _questions_used,
+            _questions_remaining,
         ) = await service.ask(
             user_id=str(current_user.id),
             session_id=payload.session_id,
