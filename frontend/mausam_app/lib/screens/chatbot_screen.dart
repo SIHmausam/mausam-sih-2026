@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../services/chatbot_api_service.dart';
+import '../services/location_service.dart';
 import '../widgets/mascot_entry_point.dart';
 
 class ChatbotScreen extends StatefulWidget {
@@ -15,6 +17,9 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ChatbotApiService _chatbotApiService = ChatbotApiService();
+  final LocationService _locationService = LocationService();
+  late final String _sessionId;
   bool _isTyping = false;
   late final AnimationController _mascotController;
 
@@ -28,6 +33,8 @@ class _ChatbotScreenState extends State<ChatbotScreen>
   @override
   void initState() {
     super.initState();
+
+    _sessionId = _chatbotApiService.createSessionId();
 
     _mascotController = AnimationController(
       vsync: this,
@@ -58,7 +65,21 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     _controller.clear();
     _scrollToBottom();
 
-    final response = _mockResponse(text);
+    String response;
+
+    try {
+      final position = await _locationService.getCurrentLocation();
+
+      response = await _chatbotApiService.ask(
+        sessionId: _sessionId,
+        question: text,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+    } catch (error) {
+      debugPrint('CHATBOT API ERROR: $error');
+      response = 'I couldn’t reach the weather service right now. Please try again in a moment.';
+    }
 
     for (var i = 0; i < response.length; i++) {
       if (!mounted) return;
@@ -94,31 +115,6 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     });
   }
 
-  String _mockResponse(String question) {
-    final q = question.toLowerCase();
-
-    if (q.contains('aqi') || q.contains('air quality')) {
-      return 'AQI tells you how clean or polluted the air is. Lower values generally mean better air quality.';
-    }
-
-    if (q.contains('uv')) {
-      return 'The UV Index measures the strength of ultraviolet radiation from the sun. Higher values mean greater sun exposure risk.';
-    }
-
-    if (q.contains('humidity')) {
-      return 'Humidity is the amount of water vapour in the air. High humidity can make warm weather feel hotter.';
-    }
-
-    if (q.contains('rain')) {
-      return 'I can help you understand rain chances, precipitation, and what the forecast means.';
-    }
-
-    if (q.contains('pm2.5')) {
-      return 'PM2.5 refers to very small airborne particles that can enter deep into the respiratory system.';
-    }
-
-    return 'I’m Mausam ☁️. I can help with weather, air quality, UV, rain, maps, and weather concepts. Once my weather service is connected, I’ll also be able to answer using your current Mausam data.';
-  }
 
   @override
   Widget build(BuildContext context) {
