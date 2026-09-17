@@ -69,4 +69,95 @@ class PersonalizationApiService {
         )
         .toList();
   }
+
+  static Future<Map<String, String>> getPersonalizedInsights({
+    required double latitude,
+    required double longitude,
+    required String city,
+    required List<PersonalizedCard> cards,
+  }) async {
+    final accessToken = await _tokenStorage.getAccessToken();
+
+    if (accessToken == null || accessToken.isEmpty) {
+      throw Exception('Authentication required');
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/api/v1/personalization/insights',
+    );
+
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $accessToken',
+            'Content-Type': 'application/json',
+            'accept': 'application/json',
+          },
+          body: jsonEncode({
+            'latitude': latitude,
+            'longitude': longitude,
+            'city': city,
+            'cards': cards
+                .map(
+                  (card) => {
+                    'card': card.cardId,
+                    'rank': card.rank,
+                    'score': card.score,
+                  },
+                )
+                .toList(),
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      String message =
+          'Insight request failed (${response.statusCode})';
+
+      try {
+        final body = jsonDecode(response.body);
+
+        if (body is Map<String, dynamic> &&
+            body['detail'] != null) {
+          message = body['detail'].toString();
+        }
+      } catch (_) {}
+
+      throw Exception(message);
+    }
+
+    final body =
+        jsonDecode(response.body) as Map<String, dynamic>;
+
+    final items = body['insights'];
+
+    if (items is! List) {
+      throw Exception('Invalid insight response');
+    }
+
+    final insights = <String, String>{};
+
+    for (final item in items) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final cardId = item['card']?.toString();
+      final insight = item['insight']?.toString();
+
+      if (cardId == null ||
+          cardId.isEmpty ||
+          insight == null ||
+          insight.isEmpty) {
+        continue;
+      }
+
+      insights[cardId] = insight;
+    }
+
+    return insights;
+  }
+
+  
 }

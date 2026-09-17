@@ -5147,6 +5147,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<WeatherData>? _weatherFuture;
   late List<PersonalizedCard> _personalizedCards;
+  bool _isPersonalizationLoading = true;
+  int _personalizationRequestId = 0;
   bool _isRefreshing = false;
   int _refreshVersion = 0;
 
@@ -5260,9 +5262,7 @@ class _HomeScreenState extends State<HomeScreen>
       value: 1.0,
     );
 
-    _personalizedCards = MockWeatherService.getPersonalizedCards(
-      widget.persona,
-    );
+    _personalizedCards = const [];
 
     _initializeHome();
   }
@@ -5375,50 +5375,156 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadPersonalization() async {
+    final requestId = ++_personalizationRequestId;
+
+    final latitude = _selectedLocationData.latitude;
+    final longitude = _selectedLocationData.longitude;
+    final city = _selectedLocation;
+
+    if (mounted) {
+      setState(() {
+        _isPersonalizationLoading = true;
+      });
+    }
+
     try {
-      final cards = await PersonalizationApiService.getPersonalizedCards(
-        latitude: _selectedLocationData.latitude,
-        longitude: _selectedLocationData.longitude,
-        city: _selectedLocation,
+      final cards =
+          await PersonalizationApiService.getPersonalizedCards(
+        latitude: latitude,
+        longitude: longitude,
+        city: city,
       );
 
-      if (!mounted) return;
+      if (!mounted ||
+          requestId != _personalizationRequestId) {
+        return;
+      }
+
+      final mergedCards = <PersonalizedCard>[
+        ...cards,
+      ];
+
+      const fallbackIds = <String>[
+        'temperature',
+        'weather_conditions',
+        'humidity',
+        'rain_forecast',
+        'wind',
+        'air_quality',
+        'uv_allergy',
+        'running_conditions',
+        'surf_conditions',
+        'tide_water',
+        'farm_garden',
+        'commute_conditions',
+        'travel_conditions',
+        'family_school',
+        'event_conditions',
+      ];
+
+      for (final id in fallbackIds) {
+        if (!mergedCards.any(
+          (card) => _canonicalCardId(card.cardId) == id,
+        )) {
+          mergedCards.add(
+            PersonalizedCard(
+              cardId: id,
+              rank: 999,
+              score: 0,
+              insight:
+                  'Current conditions and details are available for this card.',
+            ),
+          );
+        }
+      }
 
       setState(() {
-        final mergedCards = <PersonalizedCard>[...cards];
-        const fallbackIds = <String>[
-          'temperature',
-          'weather_conditions',
-          'humidity',
-          'rain_forecast',
-          'wind',
-          'air_quality',
-          'uv_allergy',
-          'running_conditions',
-          'surf_conditions',
-          'tide_water',
-          'farm_garden',
-          'commute_conditions',
-          'travel_conditions',
-          'family_school',
-          'event_conditions',
-        ];
-        for (final id in fallbackIds) {
-          if (!mergedCards.any((card) => _canonicalCardId(card.cardId) == id)) {
-            mergedCards.add(
-              PersonalizedCard(
-                cardId: id,
-                rank: 999,
-                score: 0,
-                insight: 'Current conditions and details are available for this card.',
-              ),
-            );
-          }
-        }
         _personalizedCards = mergedCards;
+        _isPersonalizationLoading = false;
+      });
+
+      // Do NOT await this.
+      // Homepage is already usable now.
+      unawaited(
+        _loadLlmInsights(
+          requestId: requestId,
+          latitude: latitude,
+          longitude: longitude,
+          city: city,
+
+          // Important:
+          // send only the real cards returned by backend,
+          // not the fallback cards we appended locally.
+          cards: cards,
+        ),
+      );
+    } catch (_) {
+      if (!mounted ||
+          requestId != _personalizationRequestId) {
+        return;
+      }
+
+      // Cold-start/mock cards are now used ONLY when
+      // real personalization genuinely fails.
+      setState(() {
+        _personalizedCards =
+            MockWeatherService.getPersonalizedCards(
+          widget.persona,
+        );
+
+        _isPersonalizationLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadLlmInsights({
+    required int requestId,
+    required double latitude,
+    required double longitude,
+    required String city,
+    required List<PersonalizedCard> cards,
+  }) async {
+    if (cards.isEmpty) {
+      return;
+    }
+
+    try {
+      final insights =
+          await PersonalizationApiService
+              .getPersonalizedInsights(
+        latitude: latitude,
+        longitude: longitude,
+        city: city,
+        cards: cards,
+      );
+
+      if (!mounted ||
+          requestId != _personalizationRequestId ||
+          insights.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        _personalizedCards =
+            _personalizedCards.map((card) {
+          final newInsight =
+              insights[card.cardId];
+
+          if (newInsight == null ||
+              newInsight.isEmpty) {
+            return card;
+          }
+
+          return card.copyWith(
+            insight: newInsight,
+          );
+        }).toList();
       });
     } catch (_) {
-      // Keep the hardcoded cards as the safe fallback.
+      // The LLM is optional for homepage rendering.
+      //
+      // If it fails, retain the deterministic insight
+      // returned with the ML personalization response.
     }
   }
 
@@ -5614,36 +5720,17 @@ class _HomeScreenState extends State<HomeScreen>
 
                           const SizedBox(height: 12),
 
-                          ...forYouCards.map(
-                            (card) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: ExpandableWeatherCard(
-                                card: card,
-                                featured: true,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    _weatherDetailRoute(
-                                      card: card,
-                                      persona: widget.persona,
-                                      weather: weather,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-
-                          if (otherWeatherCards.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            SectionTitle(title: 'OTHER WEATHER'),
-                            const SizedBox(height: 12),
-
-                            ...otherWeatherCards.map(
+                          if (_isPersonalizationLoading)
+                            const _PersonalizationLoadingCards()
+                          else ...[
+                            ...forYouCards.map(
                               (card) => Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.only(
+                                  bottom: 12,
+                                ),
                                 child: ExpandableWeatherCard(
                                   card: card,
-                                  featured: false,
+                                  featured: true,
                                   onTap: () {
                                     Navigator.of(context).push(
                                       _weatherDetailRoute(
@@ -5656,6 +5743,37 @@ class _HomeScreenState extends State<HomeScreen>
                                 ),
                               ),
                             ),
+
+                            if (otherWeatherCards.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+
+                              SectionTitle(
+                                title: 'OTHER WEATHER',
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              ...otherWeatherCards.map(
+                                (card) => Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: 10,
+                                  ),
+                                  child: ExpandableWeatherCard(
+                                    card: card,
+                                    featured: false,
+                                    onTap: () {
+                                      Navigator.of(context).push(
+                                        _weatherDetailRoute(
+                                          card: card,
+                                          persona: widget.persona,
+                                          weather: weather,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
 
                           if (weather.hourly.isNotEmpty) ...[
@@ -5766,6 +5884,114 @@ class _WeatherLoadingView extends StatelessWidget {
     return const Scaffold(
       backgroundColor: Color(0xFF101C2C),
       body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _PersonalizationLoadingCards
+    extends StatelessWidget {
+  const _PersonalizationLoadingCards();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 18,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(
+              alpha: 0.07,
+            ),
+            borderRadius:
+                BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(
+                alpha: 0.10,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child:
+                    CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Personalizing your weather',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight:
+                            FontWeight.w600,
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    Text(
+                      'Ranking the conditions that matter most to you...',
+                      style: TextStyle(
+                        color: Colors.white
+                            .withValues(
+                              alpha: 0.55,
+                            ),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        ...List.generate(
+          3,
+          (_) => Padding(
+            padding:
+                const EdgeInsets.only(
+              bottom: 10,
+            ),
+            child: Container(
+              height: 96,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white
+                    .withValues(
+                      alpha: 0.045,
+                    ),
+                borderRadius:
+                    BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.white
+                      .withValues(
+                        alpha: 0.07,
+                      ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

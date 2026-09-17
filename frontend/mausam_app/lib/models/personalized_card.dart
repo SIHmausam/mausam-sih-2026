@@ -10,4 +10,18 @@ class PersonalizedCard {
     required this.score,
     required this.insight,
   });
+
+  PersonalizedCard copyWith({
+    String? cardId,
+    int? rank,
+    double? score,
+    String? insight,
+  }) {
+    return PersonalizedCard(
+      cardId: cardId ?? this.cardId,
+      rank: rank ?? this.rank,
+      score: score ?? this.score,
+      insight: insight ?? this.insight,
+    );
+  }
 }
