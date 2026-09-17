@@ -239,6 +239,54 @@ class PersonalizedCard(BaseModel):
 
     insight: str | None = None
 
+class PersonalizationInsightCardRequest(BaseModel):
+    card: CardType
+
+    rank: int = Field(
+        ge=1,
+        le=15,
+    )
+
+    score: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
+
+
+class PersonalizationInsightsRequest(BaseModel):
+    latitude: float = Field(
+        ge=-90,
+        le=90,
+    )
+
+    longitude: float = Field(
+        ge=-180,
+        le=180,
+    )
+
+    city: str = Field(
+        min_length=1,
+    )
+
+    cards: list[
+        PersonalizationInsightCardRequest
+    ] = Field(
+        min_length=1,
+        max_length=15,
+    )
+
+
+class PersonalizedCardInsight(BaseModel):
+    card: CardType
+    insight: str
+
+
+class PersonalizationInsightsResponse(BaseModel):
+    insights: list[
+        PersonalizedCardInsight
+    ]
+
 
 class PersonalizationResult(BaseModel):
     location_id: str

@@ -14,6 +14,7 @@ from app.integrations.personalization.base import (
     PersonalizationProviderError,
 )
 from app.ml.contracts import (
+    ML_CARD_MAP,
     ML_CARD_REVERSE_MAP,
 )
 from app.ml.feature_builder import (
@@ -30,6 +31,7 @@ from app.repositories.preference_repository import (
     PreferenceRepository,
 )
 from app.schemas.personalization import (
+    PersonalizationInsightCardRequest,
     PersonalizationResult,
     PersonalizedCard,
 )
@@ -240,15 +242,8 @@ class PersonalizationService:
                 cards=build_fallback_ranking(persona),
             )
 
-        llm_insights = await self._generate_llm_insights(
-            ml_cards=ml_response.cards,
-            weather=ml_request.weather,
-            personas=list(ml_request.personas),
-        )
-
         cards = self._translate_ml_cards(
-            ml_response.cards,
-            llm_insights=llm_insights,
+            ml_response.cards
         )
 
         return PersonalizationResult(
@@ -374,6 +369,136 @@ class PersonalizationService:
                 longitude=longitude,
             )
         )
+
+    async def generate_insights_at_coordinates(
+        self,
+        *,
+        user_id: uuid.UUID,
+        city: str,
+        latitude: float,
+        longitude: float,
+        context: WeatherContextResponse,
+        cards: list[
+            PersonalizationInsightCardRequest
+        ],
+    ) -> dict[str, str]:
+        if self.llm_insight_service is None:
+            return {}
+
+        preference = (
+            await self.preference_repository
+            .get_preference(user_id)
+        )
+
+        if preference is None:
+            raise PersonalizationPreferencesNotFoundError(
+                "User preferences not found"
+            )
+
+        if preference.persona is None:
+            raise PersonalizationPersonaMissingError(
+                "User persona is not configured"
+            )
+
+        if not preference.personalized_homepage_enabled:
+            return {}
+
+        primary_persona = UserPersonaType(
+            preference.persona
+        )
+
+        personas = await self._get_selected_personas(
+            user_id=user_id,
+            primary_persona=primary_persona,
+        )
+
+        context = await self._attach_marine_if_needed(
+            context=context,
+            personas=personas,
+            latitude=latitude,
+            longitude=longitude,
+        )
+
+        try:
+            feature_request = MLFeatureBuilder.build(
+                user_id=user_id,
+                city=city,
+                personas=personas,
+                context=context,
+            )
+
+        except MLFeatureUnavailableError as exc:
+            logger.warning(
+                "LLM insights skipped because weather "
+                "features are missing: %s",
+                exc.missing_fields,
+            )
+
+            return {}
+
+        canonical_cards = []
+
+        backend_card_by_ml: dict[
+            str,
+            str,
+        ] = {}
+
+        for item in cards:
+            ml_card = ML_CARD_MAP.get(
+                item.card
+            )
+
+            if ml_card is None:
+                continue
+
+            canonical_cards.append(
+                {
+                    "card": ml_card,
+                    "rank": item.rank,
+                    "score": item.score,
+                }
+            )
+
+            backend_card_by_ml[
+                ml_card
+            ] = item.card.value
+
+        if not canonical_cards:
+            return {}
+
+        weather_context: dict[str, Any] = (
+            feature_request.weather.model_dump(
+                mode="python",
+                exclude_none=True,
+            )
+        )
+
+        try:
+            generated = (
+                await self.llm_insight_service
+                .generate_insights(
+                    cards=canonical_cards,
+                    weather_context=weather_context,
+                    persona_context={
+                        "personas": list(
+                            feature_request.personas
+                        ),
+                    },
+                )
+            )
+
+        except Exception:
+            logger.exception(
+                "Async LLM insight generation failed"
+            )
+            return {}
+
+        return {
+            backend_card_by_ml[ml_card]: insight
+            for ml_card, insight
+            in generated.items()
+            if ml_card in backend_card_by_ml
+        }
 
     async def _generate_llm_insights(
         self,
