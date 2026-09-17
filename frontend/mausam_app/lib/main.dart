@@ -34,6 +34,8 @@ import 'widgets/weather_effects.dart';
 import 'widgets/severe_alert_poster.dart';
 import 'widgets/hourly_forecast.dart';
 import 'widgets/daily_forecast.dart';
+import 'widgets/mascot_entry_point.dart';
+import 'screens/chatbot_screen.dart';
 
 void main() {
   runApp(const MausamApp());
@@ -1157,8 +1159,7 @@ class _LocationSetupScreenState extends State<LocationSetupScreen> {
 
     final selectedActivityContexts = <String>[
       for (final persona in widget.personas)
-        if (activityContexts.containsKey(persona))
-          activityContexts[persona]!,
+        if (activityContexts.containsKey(persona)) activityContexts[persona]!,
     ].toSet().toList();
 
     setState(() {
@@ -3290,9 +3291,16 @@ class WeatherDetailScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    card.details[i].contains(":") ? card.details[i].substring(0, card.details[i].indexOf(":")) : card.details[i],
+                                    card.details[i].contains(":")
+                                        ? card.details[i].substring(
+                                            0,
+                                            card.details[i].indexOf(":"),
+                                          )
+                                        : card.details[i],
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.62),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.62,
+                                      ),
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -3302,7 +3310,12 @@ class WeatherDetailScreen extends StatelessWidget {
                                 Flexible(
                                   child: Text(
                                     card.details[i].contains(":")
-                                        ? card.details[i].substring(card.details[i].indexOf(":") + 1).trim()
+                                        ? card.details[i]
+                                              .substring(
+                                                card.details[i].indexOf(":") +
+                                                    1,
+                                              )
+                                              .trim()
                                         : "—",
                                     textAlign: TextAlign.right,
                                     style: const TextStyle(
@@ -3377,8 +3390,6 @@ class WeatherDetailScreen extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 14),
-
-
                 ],
               ),
             ),
@@ -4565,6 +4576,26 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  Future<void> _openChatbot() async {
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const ChatbotScreen(),
+        transitionDuration: const Duration(milliseconds: 360),
+        reverseTransitionDuration: const Duration(milliseconds: 280),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
   void _openMenu() {
     showGeneralDialog<void>(
       context: context,
@@ -4624,6 +4655,15 @@ class _MainShellState extends State<MainShell> {
       body: Stack(
         children: [
           IndexedStack(index: _currentIndex, children: _pages),
+          Positioned(
+            left: 150,
+            right: 0,
+            bottom: 58,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: MascotEntryPoint(onTap: _openChatbot),
+            ),
+          ),
           Positioned(
             left: 18,
             right: 18,
@@ -5319,7 +5359,23 @@ class _HomeScreenState extends State<HomeScreen>
         });
   }
 
-  String _canonicalCardId(String id) { switch (id) { case 'weather_condition': return 'weather_conditions'; case 'rain': case 'rainfall': return 'rain_forecast'; case 'aqi': return 'air_quality'; case 'uv': return 'uv_allergy'; case 'soil_moisture': return 'farm_garden'; default: return id; } }
+  String _canonicalCardId(String id) {
+    switch (id) {
+      case 'weather_condition':
+        return 'weather_conditions';
+      case 'rain':
+      case 'rainfall':
+        return 'rain_forecast';
+      case 'aqi':
+        return 'air_quality';
+      case 'uv':
+        return 'uv_allergy';
+      case 'soil_moisture':
+        return 'farm_garden';
+      default:
+        return id;
+    }
+  }
 
   Future<void> _loadPersonalization() async {
     try {
@@ -5333,10 +5389,33 @@ class _HomeScreenState extends State<HomeScreen>
 
       setState(() {
         final mergedCards = <PersonalizedCard>[...cards];
-        const fallbackIds = <String>['temperature', 'weather_conditions', 'humidity', 'rain_forecast', 'wind', 'air_quality', 'uv_allergy', 'running_conditions', 'surf_conditions', 'tide_water', 'farm_garden', 'commute_conditions', 'travel_conditions', 'family_school', 'event_conditions'];
+        const fallbackIds = <String>[
+          'temperature',
+          'weather_conditions',
+          'humidity',
+          'rain_forecast',
+          'wind',
+          'air_quality',
+          'uv_allergy',
+          'running_conditions',
+          'surf_conditions',
+          'tide_water',
+          'farm_garden',
+          'commute_conditions',
+          'travel_conditions',
+          'family_school',
+          'event_conditions',
+        ];
         for (final id in fallbackIds) {
           if (!mergedCards.any((card) => _canonicalCardId(card.cardId) == id)) {
-            mergedCards.add(PersonalizedCard(cardId: id, rank: 999, score: 0, insight: 'Current conditions and details are available for this card.'));
+            mergedCards.add(
+              PersonalizedCard(
+                cardId: id,
+                rank: 999,
+                score: 0,
+                insight: 'Current conditions and details are available for this card.',
+              ),
+            );
           }
         }
         _personalizedCards = mergedCards;
@@ -7473,8 +7552,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _selectedPersonas = preferences.personas.isNotEmpty
             ? List<String>.from(preferences.personas)
             : const ["fitness"];
-        _primaryPersona =
-            preferences.primaryPersona ?? _selectedPersonas.first;
+        _primaryPersona = preferences.primaryPersona ?? _selectedPersonas.first;
         _isLoadingPreferences = false;
         _personaLimitMessage = null;
       });
@@ -7578,9 +7656,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            error.toString().replaceFirst("Exception: ", ""),
-          ),
+          content: Text(error.toString().replaceFirst("Exception: ", "")),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -7633,7 +7709,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     Flexible(
                       child: SingleChildScrollView(
                         child: Column(
-                          children: _profilePersonaDefinitions.map((personaData) {
+                          children: _profilePersonaDefinitions.map((
+                            personaData,
+                          ) {
                             final value = personaData["value"] as String;
                             final title = personaData["title"] as String;
                             final subtitle = personaData["subtitle"] as String;
@@ -7670,8 +7748,12 @@ class _ProfilePageState extends State<ProfilePage> {
                                       height: 38,
                                       decoration: BoxDecoration(
                                         color: isSelected
-                                            ? Colors.white.withValues(alpha: 0.13)
-                                            : Colors.white.withValues(alpha: 0.06),
+                                            ? Colors.white.withValues(
+                                                alpha: 0.13,
+                                              )
+                                            : Colors.white.withValues(
+                                                alpha: 0.06,
+                                              ),
                                         borderRadius: BorderRadius.circular(11),
                                       ),
                                       child: Icon(
@@ -7693,7 +7775,9 @@ class _ProfilePageState extends State<ProfilePage> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.48),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.48,
+                                        ),
                                         fontSize: 10.5,
                                       ),
                                     ),
@@ -7750,8 +7834,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                           }
                                         } else {
                                           if (selected.length >= 3) {
-                                            limitMessage =
-                                                "You can choose only 3 personas.";
+                                            limitMessage = "You can choose only 3 personas.";
                                             return;
                                           }
                                           selected.add(value);
@@ -7788,7 +7871,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: selected.isEmpty ||
+                        onPressed:
+                            selected.isEmpty ||
                                 !selected.contains(primary) ||
                                 _isSavingPersonas
                             ? null
@@ -7802,8 +7886,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: const Color(0xFF182535),
-                          disabledBackgroundColor:
-                              Colors.white.withValues(alpha: 0.16),
+                          disabledBackgroundColor: Colors.white.withValues(
+                            alpha: 0.16,
+                          ),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
@@ -8373,7 +8458,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
         persona = _displayPersona(preferences.persona);
         _selectedPersonas = List<String>.from(preferences.personas);
-        _primaryPersona = preferences.primaryPersona ?? preferences.personas.firstOrNull ?? 'fitness';
+        _primaryPersona =
+            preferences.primaryPersona ??
+            preferences.personas.firstOrNull ??
+            'fitness';
         interests = _displayInterests(preferences.interests);
         temperatureUnit = _displayTemperatureUnit(preferences.temperatureUnit);
         language = _displayLanguage(preferences.preferredLanguage);
@@ -8927,7 +9015,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _savePersonas(List<String> selected, String primary) async {
     if (_preferences == null || _isSaving) return;
-    if (selected.isEmpty || selected.length > 3 || !selected.contains(primary)) return;
+    if (selected.isEmpty || selected.length > 3 || !selected.contains(primary))
+      return;
 
     final previousSelected = List<String>.from(_selectedPersonas);
     final previousPrimary = _primaryPersona;
@@ -8980,7 +9069,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void _showPersonaSettingsSheet() {
     final selected = Set<String>.from(_selectedPersonas);
     var primary = _primaryPersona;
-  String? limitMessage;
+    String? limitMessage;
 
     showModalBottomSheet<void>(
       context: context,
@@ -9023,7 +9112,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     Flexible(
                       child: SingleChildScrollView(
                         child: Column(
-                          children: _settingsPersonaDefinitions.map((personaData) {
+                          children: _settingsPersonaDefinitions.map((
+                            personaData,
+                          ) {
                             final value = personaData['value'] as String;
                             final title = personaData['title'] as String;
                             final subtitle = personaData['subtitle'] as String;
@@ -9051,106 +9142,111 @@ class _SettingsPageState extends State<SettingsPage> {
                                   borderRadius: BorderRadius.circular(17),
                                   child: ListTile(
                                     dense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 2,
-                                  ),
-                                  leading: Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? Colors.white.withValues(alpha: 0.13)
-                                          : Colors.white.withValues(alpha: 0.06),
-                                      borderRadius: BorderRadius.circular(11),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 2,
                                     ),
-                                    child: Icon(
-                                      icon,
-                                      color: Colors.white,
-                                      size: 20,
+                                    leading: Container(
+                                      width: 38,
+                                      height: 38,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? Colors.white.withValues(
+                                                alpha: 0.13,
+                                              )
+                                            : Colors.white.withValues(
+                                                alpha: 0.06,
+                                              ),
+                                        borderRadius: BorderRadius.circular(11),
+                                      ),
+                                      child: Icon(
+                                        icon,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
                                     ),
-                                  ),
-                                  title: Text(
-                                    title,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
+                                    title: Text(
+                                      title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                  ),
-                                  subtitle: Text(
-                                    subtitle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.48),
-                                      fontSize: 10.5,
+                                    subtitle: Text(
+                                      subtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.48,
+                                        ),
+                                        fontSize: 10.5,
+                                      ),
                                     ),
-                                  ),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onTap: isSelected
-                                            ? () {
-                                                setSheetState(() {
-                                                  primary = value;
-                                                });
-                                              }
-                                            : null,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8),
-                                          child: Text(
-                                            isPrimary ? '★' : '☆',
-                                            style: TextStyle(
-                                              color: isPrimary
-                                                  ? Colors.white
-                                                  : Colors.white.withValues(
-                                                      alpha: 0.35,
-                                                    ),
-                                              fontSize: 21,
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: isSelected
+                                              ? () {
+                                                  setSheetState(() {
+                                                    primary = value;
+                                                  });
+                                                }
+                                              : null,
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(8),
+                                            child: Text(
+                                              isPrimary ? '★' : '☆',
+                                              style: TextStyle(
+                                                color: isPrimary
+                                                    ? Colors.white
+                                                    : Colors.white.withValues(
+                                                        alpha: 0.35,
+                                                      ),
+                                                fontSize: 21,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 2),
-                                      Icon(
-                                        isSelected
-                                            ? Icons.check_circle_rounded
-                                            : Icons.circle_outlined,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : Colors.white.withValues(
-                                                alpha: 0.28,
-                                              ),
-                                        size: 20,
-                                      ),
-                                    ],
+                                        const SizedBox(width: 2),
+                                        Icon(
+                                          isSelected
+                                              ? Icons.check_circle_rounded
+                                              : Icons.circle_outlined,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.white.withValues(
+                                                  alpha: 0.28,
+                                                ),
+                                          size: 20,
+                                        ),
+                                      ],
+                                    ),
+                                    onTap: () {
+                                      setSheetState(() {
+                                        if (isSelected) {
+                                          if (selected.length == 1) return;
+                                          selected.remove(value);
+                                          limitMessage = null;
+                                          if (primary == value) {
+                                            primary = selected.first;
+                                          }
+                                        } else {
+                                          if (selected.length >= 3) {
+                                            setSheetState(() {
+                                              limitMessage = 'You can choose only 3 personas.';
+                                            });
+                                            return;
+                                          }
+                                          selected.add(value);
+                                        }
+                                      });
+                                    },
                                   ),
-                                  onTap: () {
-                                    setSheetState(() {
-                                      if (isSelected) {
-                                        if (selected.length == 1) return;
-                                        selected.remove(value);
-                                        limitMessage = null;
-                                        if (primary == value) {
-                                          primary = selected.first;
-                                        }
-                                      } else {
-                                        if (selected.length >= 3) {
-                                          setSheetState(() {
-                                            limitMessage =
-                                                'You can choose only 3 personas.';
-                                          });
-                                          return;
-                                        }
-                                        selected.add(value);
-                                      }
-                                    });
-                                  },
                                 ),
-                              ),
                               ),
                             );
                           }).toList(),
@@ -9178,21 +9274,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: selected.isEmpty ||
-                                !selected.contains(primary)
+                        onPressed:
+                            selected.isEmpty || !selected.contains(primary)
                             ? null
                             : () {
                                 Navigator.pop(sheetContext);
-                                _savePersonas(
-                                  selected.toList(),
-                                  primary,
-                                );
+                                _savePersonas(selected.toList(), primary);
                               },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: const Color(0xFF182535),
-                          disabledBackgroundColor:
-                              Colors.white.withValues(alpha: 0.16),
+                          disabledBackgroundColor: Colors.white.withValues(
+                            alpha: 0.16,
+                          ),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
