@@ -5302,9 +5302,6 @@ class _HomeScreenState extends State<HomeScreen>
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.persona != widget.persona) {
-      _personalizedCards = MockWeatherService.getPersonalizedCards(
-        widget.persona,
-      );
       _loadPersonalization();
     }
   }
