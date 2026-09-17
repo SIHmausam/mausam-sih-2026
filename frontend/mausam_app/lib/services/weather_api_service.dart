@@ -10,14 +10,21 @@ class WeatherApiService {
     required double latitude,
     required double longitude,
     String city = 'Ghaziabad, UP',
+    bool includeMarine = false,
   }) async {
+    final queryParameters = <String, String>{
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+    };
+
+    if (includeMarine) {
+      queryParameters['include_marine'] = 'true';
+    }
+
     final uri = Uri.parse(
       '${AppConfig.apiBaseUrl}/api/v1/weather/context',
     ).replace(
-      queryParameters: {
-        'latitude': latitude.toString(),
-        'longitude': longitude.toString(),
-      },
+      queryParameters: queryParameters,
     );
 
     final response = await http
@@ -45,6 +52,9 @@ class WeatherApiService {
         body['agriculture'] as Map<String, dynamic>?;
     final airQuality =
         body['air_quality'] as Map<String, dynamic>?;
+
+    final marine =
+      body['marine'] as Map<String, dynamic>?;
 
     final hourly = _parseHourly(body['hourly']);
     final daily = _parseDaily(body['daily']);
@@ -146,14 +156,30 @@ class WeatherApiService {
 
       isDaylight: current['is_daylight'] == true,
 
-      waveHeight: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['wave_height']),
-      waveDirection: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['wave_direction']),
-      wavePeriod: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['wave_period']),
-      swellWaveHeight: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['swell_wave_height']),
-      swellWaveDirection: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['swell_wave_direction']),
-      swellWavePeriod: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['swell_wave_period']),
-      seaLevelHeightMsl: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['sea_level_height_msl']),
-      seaSurfaceTemperature: _toDoubleOrNull((body['marine'] as Map<String, dynamic>?)?['sea_surface_temperature']),
+      waveHeight: _toDoubleOrNull(
+        marine?['wave_height'],
+      ),
+      waveDirection: _toDoubleOrNull(
+        marine?['wave_direction'],
+      ),
+      wavePeriod: _toDoubleOrNull(
+        marine?['wave_period'],
+      ),
+      swellWaveHeight: _toDoubleOrNull(
+        marine?['swell_wave_height'],
+      ),
+      swellWaveDirection: _toDoubleOrNull(
+        marine?['swell_wave_direction'],
+      ),
+      swellWavePeriod: _toDoubleOrNull(
+        marine?['swell_wave_period'],
+      ),
+      seaLevelHeightMsl: _toDoubleOrNull(
+        marine?['sea_level_height_msl'],
+      ),
+      seaSurfaceTemperature: _toDoubleOrNull(
+        marine?['sea_surface_temperature'],
+      ),
 
       hourly: hourly,
       daily: daily,
