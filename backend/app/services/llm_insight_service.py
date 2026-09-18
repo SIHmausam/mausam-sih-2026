@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import asyncio
 import json
 import logging
@@ -55,7 +54,11 @@ class LLMInsightService:
             "precipitation_probability",
             "rain",
         ),
-        "wind": ("wind_speed_10m",),
+        "wind": (
+            "wind_speed_10m",
+            "wind_gusts_10m",
+            "wind_direction_10m",
+        ),
         "air_quality": ("us_aqi",),
         "uv_allergy": (
             "uv_index",
@@ -119,6 +122,14 @@ class LLMInsightService:
         "wind_speed_10m": {
             "unit": "km/h",
             "meaning": "wind speed",
+        },
+        "wind_gusts_10m": {
+            "unit": "km/h",
+            "meaning": "wind gust speed",
+        },
+        "wind_direction_10m": {
+            "unit": "°",
+            "meaning": "wind direction",
         },
         "visibility": {
             "unit": "m",
@@ -187,7 +198,10 @@ class LLMInsightService:
             "precipitation_probability",
             "rain",
         ),
-        "wind": ("wind_speed_10m",),
+        "wind": (
+            "wind_gusts_10m",
+            "wind_direction_10m",
+        ),
         "air_quality": ("us_aqi",),
         "uv_allergy": (
             "uv_index",
@@ -262,7 +276,11 @@ class LLMInsightService:
         "rain_forecast": (
             "Help the user decide whether rain preparation may be useful."
         ),
-        "wind": ("Explain any practical consideration for ordinary outdoor plans."),
+        "wind": (
+            "Explain the supplied gusts, or direction in the "
+            "context of outdoor planning. Use only the supplied measurements "
+            "and do not infer wind severity or activity suitability."
+        ),
         "air_quality": (
             "Give cautious air-quality awareness guidance. Do not make medical claims."
         ),
@@ -493,6 +511,10 @@ class LLMInsightService:
                         response_schema=response_schema,
                     ),
                     timeout=5.0,
+                )
+                logger.info(
+                    "RAW LLM RESPONSE: %s",
+                    json.dumps(raw_response, indent=2, default=str),
                 )
 
                 validated = LLMInsightResponse.model_validate(raw_response)
