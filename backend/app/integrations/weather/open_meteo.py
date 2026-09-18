@@ -17,6 +17,7 @@ from app.integrations.weather.base import WeatherProvider
 
 logger = logging.getLogger(__name__)
 
+
 class OpenMeteoWeatherProvider(WeatherProvider):
     def __init__(self) -> None:
         self.base_url = settings.open_meteo_weather_url
@@ -39,16 +40,10 @@ class OpenMeteoWeatherProvider(WeatherProvider):
     ) -> dict[str, Any]:
         max_attempts = 3
 
-        request_url = (
-            base_url
-            or self.base_url
-        )
+        request_url = base_url or self.base_url
 
         provider_name = (
-            "ecmwf"
-            if request_url
-            == settings.open_meteo_ecmwf_url
-            else "weather"
+            "ecmwf" if request_url == settings.open_meteo_ecmwf_url else "weather"
         )
 
         async with httpx.AsyncClient(
@@ -67,10 +62,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                     )
 
                 except httpx.RequestError as exc:
-                    elapsed_seconds = (
-                        perf_counter()
-                        - started_at
-                    )
+                    elapsed_seconds = perf_counter() - started_at
 
                     PROVIDER_REQUESTS.labels(
                         provider=provider_name,
@@ -79,9 +71,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
 
                     PROVIDER_REQUEST_DURATION.labels(
                         provider=provider_name,
-                    ).observe(
-                        elapsed_seconds
-                    )
+                    ).observe(elapsed_seconds)
 
                     logger.warning(
                         (
@@ -108,16 +98,11 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         reason="request_error",
                     ).inc()
 
-                    await asyncio.sleep(
-                        2 ** (attempt - 1)
-                    )
+                    await asyncio.sleep(2 ** (attempt - 1))
 
                     continue
 
-                elapsed_seconds = (
-                    perf_counter()
-                    - started_at
-                )
+                elapsed_seconds = perf_counter() - started_at
 
                 if response.status_code == 429:
                     PROVIDER_REQUESTS.labels(
@@ -131,9 +116,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
 
                     PROVIDER_REQUEST_DURATION.labels(
                         provider=provider_name,
-                    ).observe(
-                        elapsed_seconds
-                    )
+                    ).observe(elapsed_seconds)
 
                     logger.warning(
                         (
@@ -158,29 +141,18 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         reason="rate_limited",
                     ).inc()
 
-                    retry_after = (
-                        response.headers.get(
-                            "Retry-After"
-                        )
-                    )
+                    retry_after = response.headers.get("Retry-After")
 
                     try:
                         delay = (
                             float(retry_after)
-                            if retry_after
-                            is not None
-                            else float(
-                                2 ** (attempt - 1)
-                            )
+                            if retry_after is not None
+                            else float(2 ** (attempt - 1))
                         )
                     except ValueError:
-                        delay = float(
-                            2 ** (attempt - 1)
-                        )
+                        delay = float(2 ** (attempt - 1))
 
-                    await asyncio.sleep(
-                        min(delay, 5.0)
-                    )
+                    await asyncio.sleep(min(delay, 5.0))
 
                     continue
 
@@ -197,9 +169,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
 
                     PROVIDER_REQUEST_DURATION.labels(
                         provider=provider_name,
-                    ).observe(
-                        elapsed_seconds
-                    )
+                    ).observe(elapsed_seconds)
 
                     logger.warning(
                         (
@@ -226,9 +196,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         reason="server_error",
                     ).inc()
 
-                    await asyncio.sleep(
-                        2 ** (attempt - 1)
-                    )
+                    await asyncio.sleep(2 ** (attempt - 1))
 
                     continue
 
@@ -240,9 +208,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
 
                     PROVIDER_REQUEST_DURATION.labels(
                         provider=provider_name,
-                    ).observe(
-                        elapsed_seconds
-                    )
+                    ).observe(elapsed_seconds)
 
                     PROVIDER_FAILURES.labels(
                         provider=provider_name,
@@ -260,9 +226,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
 
                 PROVIDER_REQUEST_DURATION.labels(
                     provider=provider_name,
-                ).observe(
-                    elapsed_seconds
-                )
+                ).observe(elapsed_seconds)
 
                 logger.debug(
                     (
@@ -277,9 +241,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
 
                 return response.json()
 
-        raise RuntimeError(
-            "Open-Meteo weather request failed"
-        )
+        raise RuntimeError("Open-Meteo weather request failed")
 
     async def _get_forecast_bundle(
         self,
@@ -336,7 +298,6 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                             "wind_direction_10m,"
                             "wind_gusts_10m,"
                             "visibility,"
-
                             "et0_fao_evapotranspiration,"
                             "vapour_pressure_deficit"
                         ),
@@ -348,6 +309,9 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                             "apparent_temperature_min,"
                             "sunrise,"
                             "sunset,"
+                            "moonrise,"
+                            "moonset,"
+                            "moon_phase,"
                             "precipitation_sum,"
                             "rain_sum,"
                             "precipitation_hours,"
@@ -427,7 +391,6 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                 {
                     "latitude": latitude,
                     "longitude": longitude,
-
                     # IMPORTANT:
                     # Pass this as a list, not a
                     # comma-separated string.
@@ -441,13 +404,10 @@ class OpenMeteoWeatherProvider(WeatherProvider):
                         "soil_temperature_28_to_100cm",
                         "soil_temperature_100_to_255cm",
                     ],
-
                     "forecast_hours": 48,
                     "timezone": "auto",
                 },
-                base_url=(
-                    settings.open_meteo_ecmwf_url
-                ),
+                base_url=(settings.open_meteo_ecmwf_url),
             )
         )
 

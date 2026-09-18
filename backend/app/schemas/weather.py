@@ -84,6 +84,9 @@ class DailyWeatherItem(BaseModel):
 
     sunrise: datetime | None = None
     sunset: datetime | None = None
+    moonrise: datetime | None = None
+    moonset: datetime | None = None
+    moon_phase: float | None = None
 
     precipitation_sum: float | None = None
     rain_sum: float | None = None

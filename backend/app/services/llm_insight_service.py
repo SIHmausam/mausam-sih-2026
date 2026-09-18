@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -519,22 +520,7 @@ class LLMInsightService:
 
                 validated = LLMInsightResponse.model_validate(raw_response)
 
-                returned_cards = {
-                    item.card for item in validated.insights if item.insight.strip()
-                }
-
                 requested_card_set = set(requested_cards)
-
-                if returned_cards != requested_card_set:
-                    missing_cards = requested_card_set - returned_cards
-
-                    extra_cards = returned_cards - requested_card_set
-
-                    raise ValueError(
-                        "LLM returned incomplete card insights. "
-                        f"Missing: {sorted(missing_cards)}; "
-                        f"Extra: {sorted(extra_cards)}"
-                    )
 
                 verified_context_by_card = {
                     card["card"]: card["verified_data"] for card in controlled_cards
@@ -546,7 +532,24 @@ class LLMInsightService:
                     card_name = item.card
                     insight = item.insight.strip()
 
+                    # Never accept a card that was not requested.
+                    if card_name not in requested_card_set:
+                        logger.warning(
+                            "Ignoring unexpected LLM insight card: %s",
+                            card_name,
+                        )
+                        continue
+
                     if not insight:
+                        continue
+
+                    # Do not allow duplicate LLM entries to overwrite
+                    # an already accepted result.
+                    if card_name in grounded_insights:
+                        logger.warning(
+                            "Ignoring duplicate LLM insight for card: %s",
+                            card_name,
+                        )
                         continue
 
                     verified_data = verified_context_by_card.get(
@@ -570,13 +573,32 @@ class LLMInsightService:
 
                     grounded_insights[card_name] = insight
 
-                if set(grounded_insights) != requested_card_set:
-                    missing_cards = requested_card_set - set(grounded_insights)
+                # If the LLM omitted some cards, do not discard the
+                # valid responses that it did return.
+                #
+                # Fill only the missing cards using the deterministic
+                # backend factual fallback.
+                missing_cards = [
+                    card_name
+                    for card_name in requested_cards
+                    if card_name not in grounded_insights
+                ]
 
-                    raise ValueError(
-                        "Grounded insight generation is incomplete. "
-                        f"Missing: {sorted(missing_cards)}"
+                if missing_cards:
+                    logger.warning(
+                        "LLM returned partial insights. "
+                        "Using factual fallback for missing cards: %s",
+                        missing_cards,
                     )
+
+                    for card_name in missing_cards:
+                        grounded_insights[card_name] = self._build_factual_fallback(
+                            card=card_name,
+                            verified_data=verified_context_by_card.get(
+                                card_name,
+                                {},
+                            ),
+                        )
 
                 self._set_cached_insights(
                     cache_key,
@@ -591,13 +613,9 @@ class LLMInsightService:
                 return grounded_insights
 
             except Exception:
-                import traceback
-
                 logger.exception(
                     "LLM insight generation failed",
                 )
-
-                traceback.print_exc()
 
                 fallback_insights: dict[str, str] = {}
 
@@ -942,8 +960,8 @@ STRICT RULES:
     supported by the supplied weather information.
 13. Do not claim certainty when the supplied data is uncertain.
 14. Do not introduce weather conditions that were not supplied.
-15. Each insight should normally contain 2–4 well-written sentences and
-    approximately 60–120 words when sufficient verified data is available.
+15. Each insight should normally contain 2–3 well-written sentences and
+    approximately 50–90 words when sufficient verified data is available.
 16. Prefer useful interpretation over simply repeating numbers.
 17. When appropriate, answer the practical question:
     "What should the user do?"
@@ -1060,8 +1078,8 @@ When information is insufficient for a supported interpretation, return:
 "No specific information is available."
 
 
-28. Each insight should normally contain 2–4 sentences.
-29. Target approximately 60–120 words when the supplied verified data
+28. Each insight should normally contain 2–3 sentences.
+29. Target approximately 50–90 words when the supplied verified data
     supports a useful explanation. Do not add filler merely to increase length.
     
 30. The insight should feel like a premium personalized weather briefing,

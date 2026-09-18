@@ -69,12 +69,7 @@ class WeatherService:
                 result="hit",
             ).inc()
 
-            return (
-                CurrentWeatherResponse
-                .model_validate_json(
-                    cached
-                )
-            )
+            return CurrentWeatherResponse.model_validate_json(cached)
 
         CACHE_ACCESS.labels(
             cache="weather_current",
@@ -94,76 +89,24 @@ class WeatherService:
         response = CurrentWeatherResponse(
             latitude=latitude,
             longitude=longitude,
-
-            observed_at=current.get(
-                "time"
-            ),
-
-            temperature=current.get(
-                "temperature_2m"
-            ),
-
-            apparent_temperature=current.get(
-                "apparent_temperature"
-            ),
-
-            humidity=current.get(
-                "relative_humidity_2m"
-            ),
-
-            dew_point=current.get(
-                "dew_point_2m"
-            ),
-
-            precipitation=current.get(
-                "precipitation"
-            ),
-
-            rain=current.get(
-                "rain"
-            ),
-
-            showers=current.get(
-                "showers"
-            ),
-
-            rain_probability=current.get(
-                "precipitation_probability"
-            ),
-
-            weather_code=current.get(
-                "weather_code"
-            ),
-
-            cloud_cover=current.get(
-                "cloud_cover"
-            ),
-
-            wind_speed=current.get(
-                "wind_speed_10m"
-            ),
-
-            wind_direction=current.get(
-                "wind_direction_10m"
-            ),
-
-            wind_gusts=current.get(
-                "wind_gusts_10m"
-            ),
-
-            visibility=current.get(
-                "visibility"
-            ),
-
+            observed_at=current.get("time"),
+            temperature=current.get("temperature_2m"),
+            apparent_temperature=current.get("apparent_temperature"),
+            humidity=current.get("relative_humidity_2m"),
+            dew_point=current.get("dew_point_2m"),
+            precipitation=current.get("precipitation"),
+            rain=current.get("rain"),
+            showers=current.get("showers"),
+            rain_probability=current.get("precipitation_probability"),
+            weather_code=current.get("weather_code"),
+            cloud_cover=current.get("cloud_cover"),
+            wind_speed=current.get("wind_speed_10m"),
+            wind_direction=current.get("wind_direction_10m"),
+            wind_gusts=current.get("wind_gusts_10m"),
+            visibility=current.get("visibility"),
             is_daylight=(
-                bool(
-                    current.get(
-                        "is_day"
-                    )
-                )
-                if current.get(
-                    "is_day"
-                ) is not None
+                bool(current.get("is_day"))
+                if current.get("is_day") is not None
                 else None
             ),
         )
@@ -234,9 +177,7 @@ class WeatherService:
                 result="hit",
             ).inc()
 
-            return HourlyWeatherResponse.model_validate_json(
-                cached
-            )
+            return HourlyWeatherResponse.model_validate_json(cached)
 
         CACHE_ACCESS.labels(
             cache="weather_hourly",
@@ -301,37 +242,23 @@ class WeatherService:
                         index,
                     ),
                     dew_point=self._value_at(
-                        hourly.get(
-                            "dew_point_2m"
-                        ),
+                        hourly.get("dew_point_2m"),
                         index,
                     ),
-
                     showers=self._value_at(
-                        hourly.get(
-                            "showers"
-                        ),
+                        hourly.get("showers"),
                         index,
                     ),
-
                     cloud_cover=self._value_at(
-                        hourly.get(
-                            "cloud_cover"
-                        ),
+                        hourly.get("cloud_cover"),
                         index,
                     ),
-
                     wind_direction=self._value_at(
-                        hourly.get(
-                            "wind_direction_10m"
-                        ),
+                        hourly.get("wind_direction_10m"),
                         index,
                     ),
-
                     wind_gusts=self._value_at(
-                        hourly.get(
-                            "wind_gusts_10m"
-                        ),
+                        hourly.get("wind_gusts_10m"),
                         index,
                     ),
                 )
@@ -361,7 +288,7 @@ class WeatherService:
             longitude,
         )
 
-        cache_key = f"weather:daily:v2:{coordinates}"
+        cache_key = f"weather:daily:v3:{coordinates}"
 
         cached = await self.redis.get(cache_key)
 
@@ -371,9 +298,7 @@ class WeatherService:
                 result="hit",
             ).inc()
 
-            return DailyWeatherResponse.model_validate_json(
-                cached
-            )
+            return DailyWeatherResponse.model_validate_json(cached)
 
         CACHE_ACCESS.labels(
             cache="weather_daily",
@@ -429,14 +354,24 @@ class WeatherService:
                         daily.get("sunset"),
                         index,
                     ),
+                    moonrise=self._value_at(
+                        daily.get("moonrise"),
+                        index,
+                    ),
+                    moonset=self._value_at(
+                        daily.get("moonset"),
+                        index,
+                    ),
+                    moon_phase=self._value_at(
+                        daily.get("moon_phase"),
+                        index,
+                    ),
                     precipitation_sum=self._value_at(
                         daily.get("precipitation_sum"),
                         index,
                     ),
                     precipitation_hours=self._value_at(
-                        daily.get(
-                            "precipitation_hours"
-                        ),
+                        daily.get("precipitation_hours"),
                         index,
                     ),
                     rain_sum=self._value_at(
@@ -489,9 +424,7 @@ class WeatherService:
                 result="hit",
             ).inc()
 
-            return AgricultureContextResponse.model_validate_json(
-                cached
-            )
+            return AgricultureContextResponse.model_validate_json(cached)
 
         CACHE_ACCESS.labels(
             cache="weather_agriculture",
@@ -520,7 +453,6 @@ class WeatherService:
             [],
         )
 
-
         nearest_index = self._nearest_time_index(
             times=times,
             reference_time=reference_time,
@@ -529,111 +461,81 @@ class WeatherService:
         response = AgricultureContextResponse(
             latitude=latitude,
             longitude=longitude,
-
             surface_soil_moisture=(
                 self._value_at(
-                    hourly.get(
-                        "soil_moisture_0_to_7cm"
-                    ),
+                    hourly.get("soil_moisture_0_to_7cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             soil_moisture_7_to_28cm=(
                 self._value_at(
-                    hourly.get(
-                        "soil_moisture_7_to_28cm"
-                    ),
+                    hourly.get("soil_moisture_7_to_28cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             soil_moisture_28_to_100cm=(
                 self._value_at(
-                    hourly.get(
-                        "soil_moisture_28_to_100cm"
-                    ),
+                    hourly.get("soil_moisture_28_to_100cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             soil_moisture_100_to_255cm=(
                 self._value_at(
-                    hourly.get(
-                        "soil_moisture_100_to_255cm"
-                    ),
+                    hourly.get("soil_moisture_100_to_255cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             soil_temperature_0_to_7cm=(
                 self._value_at(
-                    hourly.get(
-                        "soil_temperature_0_to_7cm"
-                    ),
+                    hourly.get("soil_temperature_0_to_7cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             soil_temperature_7_to_28cm=(
                 self._value_at(
-                    hourly.get(
-                        "soil_temperature_7_to_28cm"
-                    ),
+                    hourly.get("soil_temperature_7_to_28cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             soil_temperature_28_to_100cm=(
                 self._value_at(
-                    hourly.get(
-                        "soil_temperature_28_to_100cm"
-                    ),
+                    hourly.get("soil_temperature_28_to_100cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             soil_temperature_100_to_255cm=(
                 self._value_at(
-                    hourly.get(
-                        "soil_temperature_100_to_255cm"
-                    ),
+                    hourly.get("soil_temperature_100_to_255cm"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             evapotranspiration=(
                 self._value_at(
-                    hourly.get(
-                        "et0_fao_evapotranspiration"
-                    ),
+                    hourly.get("et0_fao_evapotranspiration"),
                     nearest_index,
                 )
                 if nearest_index is not None
                 else None
             ),
-
             vapour_pressure_deficit=(
                 self._value_at(
-                    hourly.get(
-                        "vapour_pressure_deficit"
-                    ),
+                    hourly.get("vapour_pressure_deficit"),
                     nearest_index,
                 )
                 if nearest_index is not None
