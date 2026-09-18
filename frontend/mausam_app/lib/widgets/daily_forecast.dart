@@ -4,10 +4,12 @@ import '../models/weather_data.dart';
 
 class DailyForecast extends StatelessWidget {
   final List<DailyWeather> daily;
+  final String temperatureUnit;
 
   const DailyForecast({
     super.key,
     required this.daily,
+    this.temperatureUnit = 'celsius',
   });
 
   @override
@@ -50,6 +52,7 @@ class DailyForecast extends StatelessWidget {
                   _DailyForecastRow(
                     weather: forecast[i],
                     isToday: i == 0,
+                    temperatureUnit: temperatureUnit,
                   ),
                   if (i < forecast.length - 1)
                     Container(
@@ -70,11 +73,20 @@ class DailyForecast extends StatelessWidget {
 class _DailyForecastRow extends StatelessWidget {
   final DailyWeather weather;
   final bool isToday;
+  final String temperatureUnit;
 
   const _DailyForecastRow({
     required this.weather,
     required this.isToday,
+    required this.temperatureUnit,
   });
+
+  double _displayTemperature(double celsius) {
+    if (temperatureUnit.toLowerCase() == 'fahrenheit') {
+      return (celsius * 9 / 5) + 32;
+    }
+    return celsius;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,8 +147,8 @@ class _DailyForecastRow extends StatelessWidget {
             SizedBox(
               width: 64,
               child: Text(
-                '${weather.temperatureMax.round()}° / '
-                '${weather.temperatureMin.round()}°',
+                '${_displayTemperature(weather.temperatureMax).round()}° / '
+                '${_displayTemperature(weather.temperatureMin).round()}°',
                 textAlign: TextAlign.right,
                 style: const TextStyle(
                   fontSize: 13,

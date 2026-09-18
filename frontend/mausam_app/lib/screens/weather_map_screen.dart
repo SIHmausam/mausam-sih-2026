@@ -13,33 +13,31 @@ import '../services/weather_api_service.dart';
 import '../services/weather_map_api_service.dart';
 
 class WeatherMapScreen extends StatefulWidget {
+  final String temperatureUnit;
+  final String windSpeedUnit;
+
   const WeatherMapScreen({
     super.key,
+    this.temperatureUnit = 'celsius',
+    this.windSpeedUnit = 'km/h',
   });
 
   @override
-  State<WeatherMapScreen> createState() =>
-      _WeatherMapScreenState();
+  State<WeatherMapScreen> createState() => _WeatherMapScreenState();
 }
 
 class _WeatherMapScreenState extends State<WeatherMapScreen> {
-  static const LatLng _indiaCenter = LatLng(
-    22.9734,
-    78.6569,
-  );
+  static const LatLng _indiaCenter = LatLng(22.9734, 78.6569);
 
   final MapController _mapController = MapController();
 
-  final WeatherMapApiService _weatherMapApiService =
-      WeatherMapApiService();
+  final WeatherMapApiService _weatherMapApiService = WeatherMapApiService();
 
-  final LocationService _locationService =
-      LocationService();
+  final LocationService _locationService = LocationService();
 
   final FocusNode _searchFocusNode = FocusNode();
 
-  final TextEditingController _searchController =
-      TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   Timer? _searchDebounce;
 
@@ -97,17 +95,13 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     });
 
     try {
-      final config =
-          await _weatherMapApiService.getConfig();
+      final config = await _weatherMapApiService.getConfig();
 
       if (config.layers.isEmpty) {
-        throw Exception(
-          'No weather map layers are available.',
-        );
+        throw Exception('No weather map layers are available.');
       }
 
-      final headers =
-          await _weatherMapApiService.getTileHeaders();
+      final headers = await _weatherMapApiService.getTileHeaders();
 
       if (!mounted) {
         return;
@@ -117,19 +111,16 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         _config = config;
         _tileHeaders = headers;
 
-        _selectedLayerId =
-            config.layerById(config.defaultLayer) != null
-                ? config.defaultLayer
-                : config.layers.first.id;
+        _selectedLayerId = config.layerById(config.defaultLayer) != null
+            ? config.defaultLayer
+            : config.layers.first.id;
 
         _isLoading = false;
       });
 
       // Do not request GPS permission automatically.
       // Only use location if permission already exists.
-      await _centerOnCurrentLocation(
-        requestPermission: false,
-      );
+      await _centerOnCurrentLocation(requestPermission: false);
     } catch (error) {
       if (!mounted) {
         return;
@@ -159,26 +150,18 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
 
     try {
       if (!requestPermission) {
-        final hasAccess =
-            await _locationService.hasLocationAccess();
+        final hasAccess = await _locationService.hasLocationAccess();
 
         if (!hasAccess) {
           return;
         }
       }
 
-      final position =
-          await _locationService.getCurrentLocation();
+      final position = await _locationService.getCurrentLocation();
 
-      final locationName =
-          await _locationService.getLocationName(
-        position,
-      );
+      final locationName = await _locationService.getLocationName(position);
 
-      final point = LatLng(
-        position.latitude,
-        position.longitude,
-      );
+      final point = LatLng(position.latitude, position.longitude);
 
       if (!mounted) {
         return;
@@ -194,18 +177,13 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         _moveMapToPoint(point);
       }
 
-      await _loadWeatherForPoint(
-        point,
-        locationName,
-      );
+      await _loadWeatherForPoint(point, locationName);
     } catch (error) {
       if (!mounted || !requestPermission) {
         return;
       }
 
-      _showMessage(
-        _cleanError(error),
-      );
+      _showMessage(_cleanError(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -219,9 +197,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
   // CITY SEARCH
   // ----------------------------------------------------------
 
-  void _onSearchChanged(
-    String value,
-  ) {
+  void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
 
     final query = value.trim();
@@ -242,24 +218,16 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     });
 
     _searchDebounce = Timer(
-      const Duration(
-        milliseconds: 400,
-      ),
+      const Duration(milliseconds: 400),
       () => _searchLocations(query),
     );
   }
 
-  Future<void> _searchLocations(
-    String query,
-  ) async {
+  Future<void> _searchLocations(String query) async {
     try {
-      final results =
-          await LocationSearchService.search(
-        query,
-      );
+      final results = await LocationSearchService.search(query);
 
-      if (!mounted ||
-          query != _activeSearchQuery) {
+      if (!mounted || query != _activeSearchQuery) {
         return;
       }
 
@@ -268,8 +236,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         _isSearching = false;
       });
     } catch (error) {
-      if (!mounted ||
-          query != _activeSearchQuery) {
+      if (!mounted || query != _activeSearchQuery) {
         return;
       }
 
@@ -277,9 +244,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         _isSearching = false;
       });
 
-      _showMessage(
-        _cleanError(error),
-      );
+      _showMessage(_cleanError(error));
     }
   }
 
@@ -292,10 +257,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     required double longitude,
     required String name,
   }) async {
-    final point = LatLng(
-      latitude,
-      longitude,
-    );
+    final point = LatLng(latitude, longitude);
 
     if (!mounted) {
       return;
@@ -314,39 +276,26 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
 
     _moveMapToPoint(point);
 
-    await _loadWeatherForPoint(
-      point,
-      name,
-    );
+    await _loadWeatherForPoint(point, name);
   }
 
-  void _moveMapToPoint(
-    LatLng point,
-  ) {
+  void _moveMapToPoint(LatLng point) {
     if (!_mapReady) {
       return;
     }
 
-    final maxZoom =
-        _config?.maxZoom.toDouble() ?? 8;
+    final maxZoom = _config?.maxZoom.toDouble() ?? 8;
 
-    final targetZoom =
-        maxZoom < 7 ? maxZoom : 7.0;
+    final targetZoom = maxZoom < 7 ? maxZoom : 7.0;
 
-    _mapController.move(
-      point,
-      targetZoom,
-    );
+    _mapController.move(point, targetZoom);
   }
 
   // ----------------------------------------------------------
   // EXACT WEATHER DATA
   // ----------------------------------------------------------
 
-  Future<void> _loadWeatherForPoint(
-    LatLng point,
-    String locationName,
-  ) async {
+  Future<void> _loadWeatherForPoint(LatLng point, String locationName) async {
     if (!mounted) {
       return;
     }
@@ -357,8 +306,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     });
 
     try {
-      final weather =
-          await WeatherApiService.getWeather(
+      final weather = await WeatherApiService.getWeather(
         latitude: point.latitude,
         longitude: point.longitude,
         city: locationName,
@@ -387,9 +335,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         _isWeatherLoading = false;
       });
 
-      _showMessage(
-        _cleanError(error),
-      );
+      _showMessage(_cleanError(error));
     }
   }
 
@@ -401,46 +347,28 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     final config = _config;
     final selectedId = _selectedLayerId;
 
-    if (config == null ||
-        selectedId == null) {
+    if (config == null || selectedId == null) {
       return null;
     }
 
-    return config.layerById(
-      selectedId,
-    );
+    return config.layerById(selectedId);
   }
 
-  String _cleanError(
-    Object error,
-  ) {
-    return error
-        .toString()
-        .replaceFirst(
-          'Exception: ',
-          '',
-        );
+  String _cleanError(Object error) {
+    return error.toString().replaceFirst('Exception: ', '');
   }
 
-  void _showMessage(
-    String message,
-  ) {
+  void _showMessage(String message) {
     if (!mounted) {
       return;
     }
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _buildMapLegend(
-    String layerId,
-  ) {
+  Widget _buildMapLegend(String layerId) {
     late final List<Color> colors;
     late final List<double> stops;
     late final List<String> labels;
@@ -459,12 +387,26 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           Color.fromARGB(255, 130, 22, 146),
         ];
         stops = const [
-          0.000, 0.053, 0.105, 0.211, 0.316,
-          0.421, 0.526, 0.737, 1.000,
+          0.000,
+          0.053,
+          0.105,
+          0.211,
+          0.316,
+          0.421,
+          0.526,
+          0.737,
+          1.000,
         ];
         labels = [
-          "30°", "25°", "20°", "10°", "0°",
-          "-10°", "-20°", "-30°", "-65°",
+          "30°",
+          "25°",
+          "20°",
+          "10°",
+          "0°",
+          "-10°",
+          "-20°",
+          "-30°",
+          "-65°",
         ];
         break;
 
@@ -478,13 +420,8 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           Color.fromARGB(102, 238, 206, 206),
           Color.fromARGB(0, 255, 255, 255),
         ];
-        stops = const [
-          0.000, 0.251, 0.503, 0.628,
-          0.704, 0.980, 1.000,
-        ];
-        labels = [
-          "200", "100", "50", "25", "15", "5", "1 m/s",
-        ];
+        stops = const [0.000, 0.251, 0.503, 0.628, 0.704, 0.980, 1.000];
+        labels = ["200", "100", "50", "25", "15", "5", "1 m/s"];
         break;
 
       case "clouds":
@@ -502,12 +439,30 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           Color.fromARGB(0, 255, 255, 255),
         ];
         stops = const [
-          0.000, 0.100, 0.200, 0.300, 0.400,
-          0.500, 0.600, 0.700, 0.800, 0.900, 1.000,
+          0.000,
+          0.100,
+          0.200,
+          0.300,
+          0.400,
+          0.500,
+          0.600,
+          0.700,
+          0.800,
+          0.900,
+          1.000,
         ];
         labels = [
-          "100%", "90%", "80%", "70%", "60%", "50%",
-          "40%", "30%", "20%", "10%", "0%",
+          "100%",
+          "90%",
+          "80%",
+          "70%",
+          "60%",
+          "50%",
+          "40%",
+          "30%",
+          "20%",
+          "10%",
+          "0%",
         ];
         break;
 
@@ -521,12 +476,8 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           Color.fromARGB(0, 200, 150, 150),
           Color.fromARGB(0, 225, 200, 100),
         ];
-        stops = const [
-          0.000, 0.071, 0.286, 0.714, 0.857, 0.929, 1.000,
-        ];
-        labels = [
-          "140 mm", "10", "1", "0.5", "0.2", "0.1", "0",
-        ];
+        stops = const [0.000, 0.071, 0.286, 0.714, 0.857, 0.929, 1.000];
+        labels = ["140 mm", "10", "1", "0.5", "0.2", "0.1", "0"];
         break;
     }
 
@@ -534,16 +485,11 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
       left: 8,
       bottom: 305,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
         decoration: BoxDecoration(
           color: const Color(0xFF16263A).withValues(alpha: 0.88),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.10),
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
         ),
         child: Row(
           children: [
@@ -585,10 +531,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     );
   }
 
-
-  IconData _layerIcon(
-    String id,
-  ) {
+  IconData _layerIcon(String id) {
     switch (id) {
       case 'temperature':
         return Icons.thermostat_rounded;
@@ -605,62 +548,72 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     }
   }
 
-  String _formatNumber(
-    double value, {
-    int decimals = 1,
-  }) {
-    return value.toStringAsFixed(
-      decimals,
-    );
+  String _formatNumber(double value, {int decimals = 1}) {
+    return value.toStringAsFixed(decimals);
   }
 
   // ----------------------------------------------------------
   // MAIN BUILD
   // ----------------------------------------------------------
 
+  double _displayTemperature(double celsius) {
+    if (widget.temperatureUnit.toLowerCase() == 'fahrenheit') {
+      return (celsius * 9 / 5) + 32;
+    }
+    return celsius;
+  }
+
+  String _temperatureSymbol() {
+    return widget.temperatureUnit.toLowerCase() == 'fahrenheit' ? '°F' : '°C';
+  }
+
+  double _displayWindSpeed(double kmh) {
+    switch (widget.windSpeedUnit.toLowerCase()) {
+      case 'm/s':
+        return kmh / 3.6;
+      case 'mph':
+        return kmh / 1.609344;
+      default:
+        return kmh;
+    }
+  }
+
+  String _windSpeedSymbol() {
+    switch (widget.windSpeedUnit.toLowerCase()) {
+      case 'm/s':
+        return 'm/s';
+      case 'mph':
+        return 'mph';
+      default:
+        return 'km/h';
+    }
+  }
+
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor:
-            Color(0xFF101C2C),
-        body: Center(
-          child:
-              CircularProgressIndicator(
-            color: Colors.white,
-          ),
-        ),
+        backgroundColor: Color(0xFF101C2C),
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
       );
     }
 
-    if (_error != null ||
-        _config == null ||
-        _tileHeaders == null) {
+    if (_error != null || _config == null || _tileHeaders == null) {
       return _buildErrorState();
     }
 
     final config = _config!;
 
-    final selectedLayer =
-        _selectedLayer ??
-            config.layers.first;
+    final selectedLayer = _selectedLayer ?? config.layers.first;
 
-    final weatherTileUrl =
-        _weatherMapApiService
-            .resolveTileUrlTemplate(
-      template:
-          config.tileUrlTemplate,
+    final weatherTileUrl = _weatherMapApiService.resolveTileUrlTemplate(
+      template: config.tileUrlTemplate,
       layer: selectedLayer.id,
     );
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor:
-          const Color(
-        0xFF101C2C,
-      ),
+      backgroundColor: const Color(0xFF101C2C),
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -669,28 +622,19 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           // ------------------------------------------
 
           FlutterMap(
-            mapController:
-                _mapController,
+            mapController: _mapController,
             options: MapOptions(
-              initialCenter:
-                  _indiaCenter,
+              initialCenter: _indiaCenter,
               initialZoom: 4.6,
-              minZoom:
-                  config.minZoom
-                      .toDouble(),
-              maxZoom:
-                  config.maxZoom
-                      .toDouble(),
+              minZoom: config.minZoom.toDouble(),
+              maxZoom: config.maxZoom.toDouble(),
               cameraConstraint: CameraConstraint.contain(
                 bounds: LatLngBounds(
                   const LatLng(6.0, 67.0),
                   const LatLng(37.5, 98.0),
                 ),
               ),
-              backgroundColor:
-                  const Color(
-                0xFF101C2C,
-              ),
+              backgroundColor: const Color(0xFF101C2C),
               keepAlive: true,
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
@@ -699,30 +643,20 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               onMapReady: () {
                 _mapReady = true;
 
-                final point =
-                    _selectedPoint ??
-                        _currentLocation;
+                final point = _selectedPoint ?? _currentLocation;
 
                 if (point != null) {
-                  _moveMapToPoint(
-                    point,
-                  );
+                  _moveMapToPoint(point);
                 }
               },
 
               // Tap anywhere to load exact
               // weather for that coordinate.
-              onTap: (
-                tapPosition,
-                point,
-              ) {
+              onTap: (tapPosition, point) {
                 _selectLocation(
-                  latitude:
-                      point.latitude,
-                  longitude:
-                      point.longitude,
-                  name:
-                      'Selected Location',
+                  latitude: point.latitude,
+                  longitude: point.longitude,
+                  name: 'Selected Location',
                 );
               },
             ),
@@ -732,15 +666,9 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               // ------------------------------------
 
               TileLayer(
-                urlTemplate:
-                    AppConfig
-                        .baseMapTileUrl,
-                userAgentPackageName:
-                    AppConfig
-                        .mapUserAgentPackageName,
-                maxZoom:
-                    config.maxZoom
-                        .toDouble(),
+                urlTemplate: AppConfig.baseMapTileUrl,
+                userAgentPackageName: AppConfig.mapUserAgentPackageName,
+                maxZoom: config.maxZoom.toDouble(),
                 keepBuffer: 1,
                 panBuffer: 0,
                 retinaMode: false,
@@ -749,51 +677,27 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               // ------------------------------------
               // WEATHER OVERLAY
               // ------------------------------------
-
               TileLayer(
-                key: ValueKey(
-                  selectedLayer.id,
+                key: ValueKey(selectedLayer.id),
+                urlTemplate: weatherTileUrl,
+                tileProvider: NetworkTileProvider(
+                  headers: _tileHeaders,
+                  silenceExceptions: true,
                 ),
-                urlTemplate:
-                    weatherTileUrl,
-                tileProvider:
-                    NetworkTileProvider(
-                  headers:
-                      _tileHeaders,
-                  silenceExceptions:
-                      true,
-                ),
-                minZoom:
-                    config.minZoom
-                        .toDouble(),
-                maxZoom:
-                    config.maxZoom
-                        .toDouble(),
-                minNativeZoom:
-                    config.minZoom,
-                maxNativeZoom:
-                    config.maxZoom,
+                minZoom: config.minZoom.toDouble(),
+                maxZoom: config.maxZoom.toDouble(),
+                minNativeZoom: config.minZoom,
+                maxNativeZoom: config.maxZoom,
 
                 // Keep requests under control.
                 keepBuffer: 1,
                 panBuffer: 0,
                 retinaMode: false,
 
-                tileBuilder: (
-                  context,
-                  tileWidget,
-                  tile,
-                ) {
+                tileBuilder: (context, tileWidget, tile) {
                   return Opacity(
-                    opacity:
-                        selectedLayer
-                            .opacity
-                            .clamp(
-                              0.0,
-                              1.0,
-                            ),
-                    child:
-                        tileWidget,
+                    opacity: selectedLayer.opacity.clamp(0.0, 1.0),
+                    child: tileWidget,
                   );
                 },
               ),
@@ -801,50 +705,27 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               // ------------------------------------
               // CURRENT GPS MARKER
               // ------------------------------------
-
-              if (_currentLocation !=
-                  null)
+              if (_currentLocation != null)
                 MarkerLayer(
                   markers: [
                     Marker(
-                      point:
-                          _currentLocation!,
+                      point: _currentLocation!,
                       width: 46,
                       height: 46,
                       child: Center(
-                        child:
-                            Container(
+                        child: Container(
                           width: 22,
                           height: 22,
-                          decoration:
-                              BoxDecoration(
-                            color:
-                                const Color(
-                              0xFF4EA5FF,
-                            ),
-                            shape:
-                                BoxShape
-                                    .circle,
-                            border:
-                                Border.all(
-                              color:
-                                  Colors
-                                      .white,
-                              width: 3,
-                            ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4EA5FF),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
                             boxShadow: [
                               BoxShadow(
-                                color:
-                                    const Color(
-                                  0xFF4EA5FF,
-                                ).withValues(
-                                  alpha:
-                                      0.45,
-                                ),
-                                blurRadius:
-                                    14,
-                                spreadRadius:
-                                    5,
+                                color: const Color(0xFF4EA5FF)
+                                    .withValues(alpha: 0.45),
+                                blurRadius: 14,
+                                spreadRadius: 5,
                               ),
                             ],
                           ),
@@ -857,27 +738,17 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               // ------------------------------------
               // SEARCHED / TAPPED LOCATION MARKER
               // ------------------------------------
-
-              if (_selectedPoint != null &&
-                  _selectedPoint !=
-                      _currentLocation)
+              if (_selectedPoint != null && _selectedPoint != _currentLocation)
                 MarkerLayer(
                   markers: [
                     Marker(
-                      point:
-                          _selectedPoint!,
+                      point: _selectedPoint!,
                       width: 48,
                       height: 48,
-                      alignment:
-                          Alignment
-                              .topCenter,
+                      alignment: Alignment.topCenter,
                       child: const Icon(
-                        Icons
-                            .location_on_rounded,
-                        color:
-                            Color(
-                          0xFFE74C4C,
-                        ),
+                        Icons.location_on_rounded,
+                        color: Color(0xFFE74C4C),
                         size: 44,
                       ),
                     ),
@@ -889,25 +760,16 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           // ------------------------------------------
           // HEADER
           // ------------------------------------------
-
-          _buildHeader(
-            selectedLayer,
-          ),
+          _buildHeader(selectedLayer),
 
           // ------------------------------------------
           // LAYER SELECTOR
           // ------------------------------------------
-
-          if (!_showSearch)
-            _buildLayerSelector(
-              config,
-              selectedLayer,
-            ),
+          if (!_showSearch) _buildLayerSelector(config, selectedLayer),
 
           // ------------------------------------------
           // SEARCH PANEL
           // ------------------------------------------
-
           if (_showSearch &&
               (_isSearching ||
                   _searchResults.isNotEmpty ||
@@ -917,51 +779,39 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           // ------------------------------------------
           // MAP LEGEND
           // ------------------------------------------
-
           if (!_showSearch && _selectedLayerId != null)
-            _buildMapLegend(
-              _selectedLayerId!,
-            ),
+            _buildMapLegend(_selectedLayerId!),
 
           // ------------------------------------------
           // WEATHER DETAILS CARD
           // ------------------------------------------
-
           if (_selectedPoint != null)
             Positioned(
               left: 32,
               right: 32,
               bottom: 118,
-              child:
-                  _buildWeatherCard(),
+              child: _buildWeatherCard(),
             ),
 
           // ------------------------------------------
           // CURRENT LOCATION BUTTON
           // ------------------------------------------
-
           if (!_showSearch)
             Positioned(
               right: 18,
               top: MediaQuery.paddingOf(context).top + 122,
-              child:
-                  _buildGpsButton(),
+              child: _buildGpsButton(),
             ),
 
           // ------------------------------------------
           // ATTRIBUTION
           // ------------------------------------------
-
           Positioned(
             left: 0,
             right: 0,
             bottom: 92,
             child: IgnorePointer(
-              child: Center(
-                child: _buildAttribution(
-                  config,
-                ),
-              ),
+              child: Center(child: _buildAttribution(config)),
             ),
           ),
         ],
@@ -973,9 +823,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
   // HEADER
   // ----------------------------------------------------------
 
-  Widget _buildHeader(
-    WeatherMapLayerConfig selectedLayer,
-  ) {
+  Widget _buildHeader(WeatherMapLayerConfig selectedLayer) {
     return Positioned(
       left: 16,
       right: 16,
@@ -1004,9 +852,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF16263A).withValues(alpha: 0.88),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
             child: Row(
               children: [
@@ -1072,8 +918,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                           ),
                         ),
                 ),
-                if (_showSearch &&
-                    _searchController.text.isNotEmpty)
+                if (_showSearch && _searchController.text.isNotEmpty)
                   IconButton(
                     tooltip: 'Clear search',
                     onPressed: () {
@@ -1108,117 +953,62 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     return Positioned(
       left: 0,
       right: 0,
-      top:
-          MediaQuery.paddingOf(
-                context,
-              ).top +
-              64,
+      top: MediaQuery.paddingOf(context).top + 64,
       child: SizedBox(
         height: 50,
-        child:
-            ListView.separated(
-          padding:
-              const EdgeInsets
-                  .symmetric(
-            horizontal: 16,
-          ),
-          scrollDirection:
-              Axis.horizontal,
-          itemCount:
-              config.layers.length,
-          separatorBuilder:
-              (_, _) =>
-                  const SizedBox(
-            width: 8,
-          ),
-          itemBuilder:
-              (context, index) {
-            final layer =
-                config.layers[index];
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          scrollDirection: Axis.horizontal,
+          itemCount: config.layers.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final layer = config.layers[index];
 
-            final selected =
-                layer.id ==
-                    selectedLayer.id;
+            final selected = layer.id == selectedLayer.id;
 
             return GestureDetector(
               onTap: () {
                 setState(() {
-                  _selectedLayerId =
-                      layer.id;
+                  _selectedLayerId = layer.id;
                 });
               },
-              child:
-                  AnimatedContainer(
-                duration:
-                    const Duration(
-                  milliseconds:
-                      180,
-                ),
-                padding:
-                    const EdgeInsets
-                        .symmetric(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 9,
                 ),
-                decoration:
-                    BoxDecoration(
+                decoration: BoxDecoration(
                   color: selected
                       ? Colors.white
-                      : const Color(
-                          0xFF16263A,
-                        ).withValues(
-                          alpha: 0.88,
-                        ),
-                  borderRadius:
-                      BorderRadius
-                          .circular(
-                    18,
-                  ),
+                      : const Color(0xFF16263A).withValues(alpha: 0.88),
+                  borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: selected
                         ? Colors.white
-                        : Colors.white
-                            .withValues(
-                            alpha:
-                                0.08,
-                          ),
+                        : Colors.white.withValues(alpha: 0.08),
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      _layerIcon(
-                        layer.id,
-                      ),
+                      _layerIcon(layer.id),
                       size: 18,
-                      color: selected
-                          ? const Color(
-                              0xFF101C2C,
-                            )
-                          : Colors.white,
+                      color: selected ? const Color(0xFF101C2C) : Colors.white,
                     ),
 
-                    const SizedBox(
-                      width: 7,
-                    ),
+                    const SizedBox(width: 7),
 
                     Text(
                       layer.label,
-                      style:
-                          TextStyle(
+                      style: TextStyle(
                         color: selected
-                            ? const Color(
-                                0xFF101C2C,
-                              )
-                            : Colors
-                                .white,
+                            ? const Color(0xFF101C2C)
+                            : Colors.white,
                         fontSize: 12.5,
-                        fontWeight:
-                            selected
-                                ? FontWeight
-                                    .w700
-                                : FontWeight
-                                    .w500,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                   ],
@@ -1247,15 +1037,8 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFF172536).withValues(alpha: 0.97),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.12),
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 20,
-              ),
-            ],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 20)],
           ),
           child: _buildSearchResults(),
         ),
@@ -1268,16 +1051,12 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
       return const Padding(
         padding: EdgeInsets.all(18),
         child: Center(
-          child: CircularProgressIndicator(
-            color: Colors.white,
-            strokeWidth: 2,
-          ),
+          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
         ),
       );
     }
 
-    if (_searchController.text.trim().length >= 2 &&
-        _searchResults.isEmpty) {
+    if (_searchController.text.trim().length >= 2 && _searchResults.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(18),
         child: Text(
@@ -1295,10 +1074,8 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
       shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 10),
       itemCount: _searchResults.length,
-      separatorBuilder: (_, _) => Divider(
-        height: 1,
-        color: Colors.white.withValues(alpha: 0.07),
-      ),
+      separatorBuilder: (_, _) =>
+          Divider(height: 1, color: Colors.white.withValues(alpha: 0.07)),
       itemBuilder: (context, index) {
         final result = _searchResults[index];
 
@@ -1346,52 +1123,37 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
 
   Widget _buildWeatherCard() {
     return AnimatedSwitcher(
-      duration:
-          const Duration(
-        milliseconds: 250,
-      ),
+      duration: const Duration(milliseconds: 250),
       child: _isWeatherLoading
           ? _buildWeatherLoadingCard()
           : _selectedWeather != null
-              ? _buildWeatherDataCard(
-                  _selectedWeather!,
-                )
-              : const SizedBox.shrink(),
+          ? _buildWeatherDataCard(_selectedWeather!)
+          : const SizedBox.shrink(),
     );
   }
 
   Widget _buildWeatherLoadingCard() {
     return Container(
-      key: const ValueKey(
-        'weather-loading',
-      ),
+      key: const ValueKey('weather-loading'),
       height: 94,
-      padding:
-          const EdgeInsets.all(
-        18,
-      ),
-      decoration:
-          _weatherCardDecoration(),
+      padding: const EdgeInsets.all(18),
+      decoration: _weatherCardDecoration(),
       child: const Row(
         children: [
           SizedBox(
             width: 22,
             height: 22,
-            child:
-                CircularProgressIndicator(
+            child: CircularProgressIndicator(
               color: Colors.white,
               strokeWidth: 2,
             ),
           ),
-          SizedBox(
-            width: 14,
-          ),
+          SizedBox(width: 14),
           Text(
             'Loading weather...',
             style: TextStyle(
               color: Colors.white70,
-              fontWeight:
-                  FontWeight.w500,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -1399,124 +1161,86 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     );
   }
 
-  Widget _buildWeatherDataCard(
-    WeatherData weather,
-  ) {
+  Widget _buildWeatherDataCard(WeatherData weather) {
     return Container(
-      key: const ValueKey(
-        'weather-data',
-      ),
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 10,
-      ),
-      decoration:
-          _weatherCardDecoration(),
+      key: const ValueKey('weather-data'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: _weatherCardDecoration(),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        mainAxisSize:
-            MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               const Icon(
-                Icons
-                    .location_on_rounded,
-                color:
-                    Colors.white70,
+                Icons.location_on_rounded,
+                color: Colors.white70,
                 size: 17,
               ),
 
-              const SizedBox(
-                width: 6,
-              ),
+              const SizedBox(width: 6),
 
               Expanded(
                 child: Text(
                   _selectedLocationName,
                   maxLines: 1,
-                  overflow:
-                      TextOverflow
-                          .ellipsis,
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.white,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 14,
-                    fontWeight:
-                        FontWeight
-                            .w700,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
             ],
           ),
 
-          const SizedBox(
-            height: 8,
-          ),
+          const SizedBox(height: 8),
 
           Row(
-            mainAxisAlignment:
-                MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-                _weatherMetric(
-                  icon: Icons
-                      .thermostat_rounded,
-                  value:
-                      '${_formatNumber(weather.temperature)}°C',
-                  label:
-                      'Temperature',
-                ),
+              _weatherMetric(
+                icon: Icons.thermostat_rounded,
+                value:
+                    '${_formatNumber(_displayTemperature(weather.temperature))}${_temperatureSymbol()}',
+                label: 'Temperature',
+              ),
 
-                _metricDivider(),
+              _metricDivider(),
 
-                _weatherMetric(
-                  icon: Icons
-                      .water_drop_outlined,
-                  value:
-                      '${_formatNumber(weather.rain)} mm',
-                  label: 'Rain',
-                ),
+              _weatherMetric(
+                icon: Icons.water_drop_outlined,
+                value: '${_formatNumber(weather.rain)} mm',
+                label: 'Rain',
+              ),
 
-                _metricDivider(),
+              _metricDivider(),
 
-                _weatherMetric(
-                  icon:
-                      Icons.air_rounded,
-                  value:
-                      '${_formatNumber(weather.windSpeed)} km/h',
-                  label: 'Wind',
-                ),
+              _weatherMetric(
+                icon: Icons.air_rounded,
+                value:
+                    '${_formatNumber(_displayWindSpeed(weather.windSpeed))} ${_windSpeedSymbol()}',
+                label: 'Wind',
+              ),
 
-                _metricDivider(),
+              _metricDivider(),
 
-                _weatherMetric(
-                  icon:
-                      Icons.eco_outlined,
-                  value:
-                      _formatNumber(
-                    weather.usAqi,
-                    decimals: 0,
-                  ),
-                  label: 'AQI',
-                ),
+              _weatherMetric(
+                icon: Icons.eco_outlined,
+                value: _formatNumber(weather.usAqi, decimals: 0),
+                label: 'AQI',
+              ),
 
-                _metricDivider(),
+              _metricDivider(),
 
-                _weatherMetric(
-                  icon: Icons
-                      .wb_sunny_outlined,
-                  value:
-                      _formatNumber(
-                    weather.uvIndex,
-                  ),
-                  label: 'UV',
-                ),
-              ],
-            ),
+              _weatherMetric(
+                icon: Icons.wb_sunny_outlined,
+                value: _formatNumber(weather.uvIndex),
+                label: 'UV',
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1528,47 +1252,27 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     required String label,
   }) {
     return Padding(
-      padding:
-          const EdgeInsets
-              .symmetric(
-        horizontal: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 5),
       child: Column(
         children: [
-          Icon(
-            icon,
-            color:
-                Colors.white70,
-            size: 18,
-          ),
+          Icon(icon, color: Colors.white70, size: 18),
 
-          const SizedBox(
-            height: 5,
-          ),
+          const SizedBox(height: 5),
 
           Text(
             value,
-            style:
-                const TextStyle(
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 12,
-              fontWeight:
-                  FontWeight.w700,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
-          const SizedBox(
-            height: 2,
-          ),
+          const SizedBox(height: 2),
 
           Text(
             label,
-            style:
-                const TextStyle(
-              color:
-                  Colors.white54,
-              fontSize: 9,
-            ),
+            style: const TextStyle(color: Colors.white54, fontSize: 9),
           ),
         ],
       ),
@@ -1579,42 +1283,17 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     return Container(
       width: 1,
       height: 38,
-      margin:
-          const EdgeInsets
-              .symmetric(
-        horizontal: 4,
-      ),
-      color:
-          Colors.white.withValues(
-        alpha: 0.10,
-      ),
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      color: Colors.white.withValues(alpha: 0.10),
     );
   }
 
   BoxDecoration _weatherCardDecoration() {
     return BoxDecoration(
-      color:
-          const Color(
-        0xFF172536,
-      ).withValues(
-        alpha: 0.94,
-      ),
-      borderRadius:
-          BorderRadius.circular(
-        20,
-      ),
-      border: Border.all(
-        color:
-            Colors.white.withValues(
-          alpha: 0.12,
-        ),
-      ),
-      boxShadow: const [
-        BoxShadow(
-          color: Colors.black26,
-          blurRadius: 16,
-        ),
-      ],
+      color: const Color(0xFF172536).withValues(alpha: 0.94),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 16)],
     );
   }
 
@@ -1626,58 +1305,29 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     return GestureDetector(
       onTap: _isLocating
           ? null
-          : () =>
-              _centerOnCurrentLocation(
-                requestPermission:
-                    true,
-              ),
+          : () => _centerOnCurrentLocation(requestPermission: true),
       child: Container(
         width: 54,
         height: 54,
-        decoration:
-            BoxDecoration(
-          color:
-              const Color(
-            0xFF16263A,
-          ).withValues(
-            alpha: 0.88,
-          ),
-          borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
-          border: Border.all(
-            color:
-                Colors.white
-                    .withValues(
-              alpha: 0.12,
-            ),
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color:
-                  Colors.black26,
-              blurRadius: 12,
-            ),
-          ],
+        decoration: BoxDecoration(
+          color: const Color(0xFF16263A).withValues(alpha: 0.88),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 12)],
         ),
         child: Center(
           child: _isLocating
               ? const SizedBox(
                   width: 21,
                   height: 21,
-                  child:
-                      CircularProgressIndicator(
+                  child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color:
-                        Colors.white,
+                    color: Colors.white,
                   ),
                 )
               : const Icon(
-                  Icons
-                      .my_location_rounded,
-                  color:
-                      Colors.white,
+                  Icons.my_location_rounded,
+                  color: Colors.white,
                   size: 26,
                 ),
         ),
@@ -1689,45 +1339,21 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
   // ATTRIBUTION
   // ----------------------------------------------------------
 
-  Widget _buildAttribution(
-    WeatherMapConfig config,
-  ) {
+  Widget _buildAttribution(WeatherMapConfig config) {
     return Container(
-      constraints:
-          const BoxConstraints(
-        maxWidth: 310,
-      ),
-      padding:
-          const EdgeInsets
-              .symmetric(
-        horizontal: 6,
-        vertical: 3,
-      ),
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(
-          0xFF101C2C,
-        ).withValues(
-          alpha: 0.78,
-        ),
-        borderRadius:
-            BorderRadius.circular(
-          8,
-        ),
+      constraints: const BoxConstraints(maxWidth: 310),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101C2C).withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         '${AppConfig.baseMapAttribution}'
         ' • '
         '${config.attribution}',
         maxLines: 1,
-        overflow:
-            TextOverflow.ellipsis,
-        style:
-            const TextStyle(
-          color: Colors.white60,
-          fontSize: 9,
-        ),
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white60, fontSize: 9),
       ),
     );
   }
@@ -1738,78 +1364,42 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
 
   Widget _buildErrorState() {
     return Scaffold(
-      backgroundColor:
-          const Color(
-        0xFF101C2C,
-      ),
+      backgroundColor: const Color(0xFF101C2C),
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding:
-                const EdgeInsets.all(
-              28,
-            ),
+            padding: const EdgeInsets.all(28),
             child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.map_outlined,
-                  size: 52,
-                  color:
-                      Colors.white70,
-                ),
+                const Icon(Icons.map_outlined, size: 52, color: Colors.white70),
 
-                const SizedBox(
-                  height: 18,
-                ),
+                const SizedBox(height: 18),
 
                 const Text(
                   'Weather map unavailable',
-                  textAlign:
-                      TextAlign.center,
-                  style:
-                      TextStyle(
-                    color:
-                        Colors.white,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
                     fontSize: 21,
-                    fontWeight:
-                        FontWeight
-                            .w700,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
 
-                const SizedBox(
-                  height: 10,
-                ),
+                const SizedBox(height: 10),
 
                 Text(
-                  _error ??
-                      'Unable to load map.',
-                  textAlign:
-                      TextAlign.center,
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.white60,
-                  ),
+                  _error ?? 'Unable to load map.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white60),
                 ),
 
-                const SizedBox(
-                  height: 22,
-                ),
+                const SizedBox(height: 22),
 
                 FilledButton.icon(
-                  onPressed:
-                      _loadMap,
-                  icon: const Icon(
-                    Icons
-                        .refresh_rounded,
-                  ),
-                  label:
-                      const Text(
-                    'Retry',
-                  ),
+                  onPressed: _loadMap,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
                 ),
               ],
             ),

@@ -4,8 +4,13 @@ import '../models/weather_data.dart';
 
 class HourlyForecast extends StatefulWidget {
   final List<HourlyWeather> hourly;
+  final String temperatureUnit;
 
-  const HourlyForecast({super.key, required this.hourly});
+  const HourlyForecast({
+    super.key,
+    required this.hourly,
+    this.temperatureUnit = 'celsius',
+  });
 
   @override
   State<HourlyForecast> createState() => _HourlyForecastState();
@@ -89,6 +94,7 @@ class _HourlyForecastState extends State<HourlyForecast> {
                     return _HourlyForecastItem(
                       weather: item,
                       isFirst: index == 0,
+                      temperatureUnit: widget.temperatureUnit,
                     );
                   },
                 ),
@@ -158,8 +164,20 @@ class _HourlyScrollIndicator extends StatelessWidget {
 class _HourlyForecastItem extends StatelessWidget {
   final HourlyWeather weather;
   final bool isFirst;
+  final String temperatureUnit;
 
-  const _HourlyForecastItem({required this.weather, required this.isFirst});
+  const _HourlyForecastItem({
+    required this.weather,
+    required this.isFirst,
+    required this.temperatureUnit,
+  });
+
+  double _displayTemperature(double celsius) {
+    if (temperatureUnit.toLowerCase() == 'fahrenheit') {
+      return (celsius * 9 / 5) + 32;
+    }
+    return celsius;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +206,7 @@ class _HourlyForecastItem extends StatelessWidget {
             ),
 
             Text(
-              '${weather.temperature.round()}°',
+              '${_displayTemperature(weather.temperature).round()}°',
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
