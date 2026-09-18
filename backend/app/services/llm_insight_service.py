@@ -11,18 +11,19 @@ from app.schemas.llm import LLMInsightResponse
 
 logger = logging.getLogger(__name__)
 
-
 class LLMClient(Protocol):
     async def generate_json(
         self,
         *,
         prompt: str,
         response_schema: dict[str, Any],
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        ...
 
 
 class LLMClientError(Exception):
     """Raised when the LLM cannot generate a valid response."""
+
 
 
 class LLMInsightService:
@@ -40,17 +41,27 @@ class LLMInsightService:
     - calculate weather values
     - replace deterministic card insights
     """
-
+    
     INSIGHT_CACHE_TTL_SECONDS: ClassVar[int] = 10 * 60
 
-    _insight_cache: ClassVar[dict[str, tuple[float, dict[str, str]]]] = {}
+    _insight_cache: ClassVar[
+        dict[str, tuple[float, dict[str, str]]]
+    ] = {}
 
     _cache_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
-    CARD_FIELDS: ClassVar[dict[str, tuple[str, ...]]] = {
-        "temperature": ("temperature_2m",),
-        "weather_conditions": ("weather_code",),
-        "humidity": ("relative_humidity_2m",),
+    CARD_FIELDS: ClassVar[
+        dict[str, tuple[str, ...]]
+    ] = {
+        "temperature": (
+            "temperature_2m",
+        ),
+        "weather_conditions": (
+            "weather_code",
+        ),
+        "humidity": (
+            "relative_humidity_2m",
+        ),
         "rain_forecast": (
             "precipitation_probability",
             "rain",
@@ -60,7 +71,9 @@ class LLMInsightService:
             "wind_gusts_10m",
             "wind_direction_10m",
         ),
-        "air_quality": ("us_aqi",),
+        "air_quality": (
+            "us_aqi",
+        ),
         "uv_allergy": (
             "uv_index",
             "us_aqi",
@@ -76,7 +89,9 @@ class LLMInsightService:
             "wave_height",
             "wave_period",
         ),
-        "tide_water": ("sea_surface_temperature",),
+        "tide_water": (
+            "sea_surface_temperature",
+        ),
         "farm_garden": (
             "soil_moisture_0_to_7cm",
             "precipitation_probability",
@@ -103,7 +118,9 @@ class LLMInsightService:
         ),
     }
 
-    FIELD_METADATA: ClassVar[dict[str, dict[str, str]]] = {
+    FIELD_METADATA: ClassVar[
+        dict[str, dict[str, str]]
+    ] = {
         "temperature_2m": {
             "unit": "°C",
             "meaning": "air temperature",
@@ -128,9 +145,10 @@ class LLMInsightService:
             "unit": "km/h",
             "meaning": "wind gust speed",
         },
+
         "wind_direction_10m": {
-            "unit": "°",
-            "meaning": "wind direction",
+           "unit": "°",
+           "meaning": "wind direction",
         },
         "visibility": {
             "unit": "m",
@@ -162,7 +180,9 @@ class LLMInsightService:
         },
     }
 
-    UNSUPPORTED_CLASSIFICATION_TERMS: ClassVar[set[str]] = {
+    UNSUPPORTED_CLASSIFICATION_TERMS: ClassVar[
+        set[str]
+    ] = {
         "high",
         "low",
         "moderate",
@@ -191,10 +211,19 @@ class LLMInsightService:
         "unsafe",
     }
 
-    FALLBACK_FIELD_ORDER: ClassVar[dict[str, tuple[str, ...]]] = {
-        "temperature": ("temperature_2m",),
-        "weather_conditions": ("weather_code",),
-        "humidity": ("relative_humidity_2m",),
+
+    FALLBACK_FIELD_ORDER: ClassVar[
+        dict[str, tuple[str, ...]]
+    ] = {
+        "temperature": (
+            "temperature_2m",
+        ),
+        "weather_conditions": (
+            "weather_code",
+        ),
+        "humidity": (
+            "relative_humidity_2m",
+        ),
         "rain_forecast": (
             "precipitation_probability",
             "rain",
@@ -203,7 +232,9 @@ class LLMInsightService:
             "wind_gusts_10m",
             "wind_direction_10m",
         ),
-        "air_quality": ("us_aqi",),
+        "air_quality": (
+            "us_aqi",
+        ),
         "uv_allergy": (
             "uv_index",
             "relative_humidity_2m",
@@ -216,7 +247,9 @@ class LLMInsightService:
             "wave_height",
             "wave_period",
         ),
-        "tide_water": ("sea_surface_temperature",),
+        "tide_water": (
+            "sea_surface_temperature",
+        ),
         "farm_garden": (
             "soil_moisture_0_to_7cm",
             "precipitation_probability",
@@ -229,14 +262,18 @@ class LLMInsightService:
             "precipitation_probability",
             "wind_speed_10m",
         ),
-        "family_school": ("precipitation_probability",),
+        "family_school": (
+            "precipitation_probability",
+        ),
         "event_conditions": (
             "precipitation_probability",
             "temperature_2m",
         ),
     }
 
-    WEATHER_CODE_DESCRIPTIONS: ClassVar[dict[int, str]] = {
+    WEATHER_CODE_DESCRIPTIONS: ClassVar[
+        dict[int, str]
+    ] = {
         0: "clear sky",
         1: "mainly clear",
         2: "partly cloudy",
@@ -267,13 +304,19 @@ class LLMInsightService:
         99: "thunderstorm with heavy hail",
     }
 
-    CARD_GUIDANCE: ClassVar[dict[str, str]] = {
-        "temperature": ("Focus on practical clothing or outdoor-planning guidance."),
+    CARD_GUIDANCE: ClassVar[
+        dict[str, str]
+    ] = {
+        "temperature": (
+            "Focus on practical clothing or outdoor-planning guidance."
+        ),
         "weather_conditions": (
             "Explain how the current sky/weather condition may affect "
             "ordinary outdoor plans."
         ),
-        "humidity": ("Give practical comfort-oriented guidance for outdoor plans."),
+        "humidity": (
+            "Give practical comfort-oriented guidance for outdoor plans."
+        ),
         "rain_forecast": (
             "Help the user decide whether rain preparation may be useful."
         ),
@@ -283,7 +326,8 @@ class LLMInsightService:
             "and do not infer wind severity or activity suitability."
         ),
         "air_quality": (
-            "Give cautious air-quality awareness guidance. Do not make medical claims."
+            "Give cautious air-quality awareness guidance. Do not make "
+            "medical claims."
         ),
         "uv_allergy": (
             "Give cautious outdoor exposure guidance based on supplied UV "
@@ -307,20 +351,27 @@ class LLMInsightService:
             "and rain information. Do not prescribe specialized agricultural "
             "treatment."
         ),
-        "commute_conditions": ("Give practical weather-related commute preparation."),
-        "travel_conditions": ("Give practical weather preparation for travel."),
+        "commute_conditions": (
+            "Give practical weather-related commute preparation."
+        ),
+        "travel_conditions": (
+            "Give practical weather preparation for travel."
+        ),
         "family_school": (
             "Give simple preparation guidance for school or family outings."
         ),
-        "event_conditions": ("Give practical planning guidance for outdoor events."),
+        "event_conditions": (
+            "Give practical planning guidance for outdoor events."
+        ),
     }
 
+
     def __init__(
-        self,
-        llm_client: LLMClient,
+       self,
+       llm_client: LLMClient,
     ) -> None:
         self.llm_client = llm_client
-
+        
     @staticmethod
     def _build_cache_key(
         *,
@@ -351,7 +402,7 @@ class LLMInsightService:
             separators=(",", ":"),
             default=str,
         )
-
+        
     @classmethod
     def _get_cached_insights(
         cls,
@@ -364,7 +415,10 @@ class LLMInsightService:
 
         created_at, insights = cached
 
-        if time.monotonic() - created_at >= cls.INSIGHT_CACHE_TTL_SECONDS:
+        if (
+            time.monotonic() - created_at
+            >= cls.INSIGHT_CACHE_TTL_SECONDS
+        ):
             cls._insight_cache.pop(cache_key, None)
             return None
 
@@ -440,7 +494,9 @@ class LLMInsightService:
             persona_context=persona_context,
         )
 
-        cached_insights = self._get_cached_insights(cache_key)
+        cached_insights = self._get_cached_insights(
+            cache_key
+        )
 
         if cached_insights is not None:
             logger.info(
@@ -455,15 +511,23 @@ class LLMInsightService:
         )
 
         async with self._cache_lock:
+
             # Another request may have generated the same result
             # while this request was waiting for the lock.
-            cached_insights = self._get_cached_insights(cache_key)
+            cached_insights = self._get_cached_insights(
+                cache_key
+            )
 
             if cached_insights is not None:
-                logger.info("LLM insight cache HIT after lock.")
+                logger.info(
+                    "LLM insight cache HIT after lock."
+                )
                 return cached_insights
 
-            requested_cards = [card["card"] for card in controlled_cards]
+            requested_cards = [
+                card["card"]
+                for card in controlled_cards
+            ]
 
             response_schema = {
                 "type": "object",
@@ -502,28 +566,56 @@ class LLMInsightService:
 
             try:
                 logger.info(
-                    "Generating %d insights with ONE LLM API request.",
+                "Generating %d insights with ONE LLM API request.",
                     len(controlled_cards),
                 )
 
                 raw_response = await asyncio.wait_for(
                     self.llm_client.generate_json(
-                        prompt=prompt,
-                        response_schema=response_schema,
-                    ),
-                    timeout=5.0,
+                    prompt=prompt,
+                    response_schema=response_schema,
+                ),
+                timeout=5.0,
                 )
                 logger.info(
-                    "RAW LLM RESPONSE: %s",
-                    json.dumps(raw_response, indent=2, default=str),
+                  "RAW LLM RESPONSE: %s",
+                   json.dumps(raw_response, indent=2, default=str),
                 )
 
-                validated = LLMInsightResponse.model_validate(raw_response)
+                validated = LLMInsightResponse.model_validate(
+                   raw_response
+                )
 
-                requested_card_set = set(requested_cards)
+                returned_cards = {
+                    item.card
+                    for item in validated.insights
+                    if item.insight.strip()
+                }
+
+                requested_card_set = set(
+                    requested_cards
+                )
+
+                if returned_cards != requested_card_set:
+                    missing_cards = (
+                        requested_card_set
+                        - returned_cards
+                    )
+
+                    extra_cards = (
+                        returned_cards
+                        - requested_card_set
+                    )
+
+                    raise ValueError(
+                        "LLM returned incomplete card insights. "
+                        f"Missing: {sorted(missing_cards)}; "
+                        f"Extra: {sorted(extra_cards)}"
+                    )
 
                 verified_context_by_card = {
-                    card["card"]: card["verified_data"] for card in controlled_cards
+                    card["card"]: card["verified_data"]
+                    for card in controlled_cards
                 }
 
                 grounded_insights: dict[str, str] = {}
@@ -532,29 +624,14 @@ class LLMInsightService:
                     card_name = item.card
                     insight = item.insight.strip()
 
-                    # Never accept a card that was not requested.
-                    if card_name not in requested_card_set:
-                        logger.warning(
-                            "Ignoring unexpected LLM insight card: %s",
-                            card_name,
-                        )
-                        continue
-
                     if not insight:
                         continue
 
-                    # Do not allow duplicate LLM entries to overwrite
-                    # an already accepted result.
-                    if card_name in grounded_insights:
-                        logger.warning(
-                            "Ignoring duplicate LLM insight for card: %s",
+                    verified_data = (
+                        verified_context_by_card.get(
                             card_name,
+                            {},
                         )
-                        continue
-
-                    verified_data = verified_context_by_card.get(
-                        card_name,
-                        {},
                     )
 
                     if self._contains_unsupported_classification(
@@ -562,43 +639,32 @@ class LLMInsightService:
                         verified_data=verified_data,
                     ):
                         logger.warning(
-                            "Rejected unsupported LLM classification for card %s.",
+                            "Rejected unsupported LLM "
+                            "classification for card %s.",
                             card_name,
                         )
 
-                        insight = self._build_factual_fallback(
-                            card=card_name,
-                            verified_data=verified_data,
+                        insight = (
+                            self._build_factual_fallback(
+                                card=card_name,
+                                verified_data=verified_data,
+                            )
                         )
 
-                    grounded_insights[card_name] = insight
+                    grounded_insights[
+                        card_name
+                    ] = insight
 
-                # If the LLM omitted some cards, do not discard the
-                # valid responses that it did return.
-                #
-                # Fill only the missing cards using the deterministic
-                # backend factual fallback.
-                missing_cards = [
-                    card_name
-                    for card_name in requested_cards
-                    if card_name not in grounded_insights
-                ]
-
-                if missing_cards:
-                    logger.warning(
-                        "LLM returned partial insights. "
-                        "Using factual fallback for missing cards: %s",
-                        missing_cards,
+                if set(grounded_insights) != requested_card_set:
+                    missing_cards = (
+                        requested_card_set
+                        - set(grounded_insights)
                     )
 
-                    for card_name in missing_cards:
-                        grounded_insights[card_name] = self._build_factual_fallback(
-                            card=card_name,
-                            verified_data=verified_context_by_card.get(
-                                card_name,
-                                {},
-                            ),
-                        )
+                    raise ValueError(
+                        "Grounded insight generation is incomplete. "
+                        f"Missing: {sorted(missing_cards)}"
+                    )
 
                 self._set_cached_insights(
                     cache_key,
@@ -612,17 +678,23 @@ class LLMInsightService:
 
                 return grounded_insights
 
-            except Exception:
+            except Exception: 
+                import traceback
+
                 logger.exception(
                     "LLM insight generation failed",
                 )
+
+                traceback.print_exc()
 
                 fallback_insights: dict[str, str] = {}
 
                 for card in controlled_cards:
                     card_name = card["card"]
 
-                    fallback_insights[card_name] = self._build_factual_fallback(
+                    fallback_insights[
+                        card_name
+                    ] = self._build_factual_fallback(
                         card=card_name,
                         verified_data=card.get(
                             "verified_data",
@@ -631,7 +703,6 @@ class LLMInsightService:
                     )
 
                 return fallback_insights
-
     @staticmethod
     def _build_recommendation(
         *,
@@ -640,17 +711,30 @@ class LLMInsightService:
     ) -> str | None:
 
         if card == "rain_forecast":
-            probability = weather_context.get("precipitation_probability")
+            probability = weather_context.get(
+                "precipitation_probability"
+            )
 
-            if isinstance(probability, (int, float)) and probability >= 30:
-                return "Keep rain protection available and keep outdoor plans flexible."
+            if (
+                isinstance(probability, (int, float))
+                and probability >= 30
+            ):
+                return (
+                    "Keep rain protection available and "
+                    "keep outdoor plans flexible."
+                )
 
             return None
 
         if card == "humidity":
-            humidity = weather_context.get("relative_humidity_2m")
+            humidity = weather_context.get(
+                "relative_humidity_2m"
+            )
 
-            if isinstance(humidity, (int, float)) and humidity >= 80:
+            if (
+                isinstance(humidity, (int, float))
+                and humidity >= 80
+            ):
                 return (
                     "For outdoor plans, breathable clothing "
                     "and flexibility may improve comfort."
@@ -659,16 +743,27 @@ class LLMInsightService:
             return None
 
         if card == "temperature":
-            temperature = weather_context.get("temperature_2m")
+            temperature = weather_context.get(
+                "temperature_2m"
+            )
 
-            if isinstance(temperature, (int, float)) and temperature >= 32:
+            if (
+                isinstance(temperature, (int, float))
+                and temperature >= 32
+            ):
                 return (
                     "For longer outdoor plans, consider "
                     "lighter clothing and cooler times of day."
                 )
 
-            if isinstance(temperature, (int, float)) and temperature <= 15:
-                return "Consider carrying an extra layer for outdoor plans."
+            if (
+                isinstance(temperature, (int, float))
+                and temperature <= 15
+            ):
+                return (
+                    "Consider carrying an extra layer for "
+                    "outdoor plans."
+                )
 
             return None
 
@@ -688,9 +783,14 @@ class LLMInsightService:
             )
 
         if card == "wind":
-            wind_speed = weather_context.get("wind_speed_10m")
+            wind_speed = weather_context.get(
+                "wind_speed_10m"
+            )
 
-            if isinstance(wind_speed, (int, float)) and wind_speed >= 25:
+            if (
+                isinstance(wind_speed, (int, float))
+                and wind_speed >= 25
+            ):
                 return (
                     "Account for wind when planning exposed "
                     "outdoor activities and secure loose items."
@@ -706,9 +806,14 @@ class LLMInsightService:
             )
 
         if card == "uv_allergy":
-            uv_index = weather_context.get("uv_index")
+            uv_index = weather_context.get(
+                "uv_index"
+            )
 
-            if isinstance(uv_index, (int, float)) and uv_index >= 3:
+            if (
+                isinstance(uv_index, (int, float))
+                and uv_index >= 3
+            ):
                 return (
                     "Consider sun protection if you will be "
                     "outdoors for an extended period."
@@ -717,9 +822,13 @@ class LLMInsightService:
             return None
 
         if card == "weather_conditions":
-            return "Keep outdoor plans flexible if weather conditions change."
+            return (
+                "Keep outdoor plans flexible if weather "
+                "conditions change."
+            )
 
         return None
+
 
     @classmethod
     def _build_card_context(
@@ -765,19 +874,29 @@ class LLMInsightService:
                         weather_code = None
 
                     if weather_code is not None:
-                        description = cls.WEATHER_CODE_DESCRIPTIONS.get(weather_code)
+                        description = (
+                            cls.WEATHER_CODE_DESCRIPTIONS.get(
+                                weather_code
+                            )
+                        )
 
                         if description:
-                            field_data["interpretation"] = description
+                            field_data["interpretation"] = (
+                                description
+                            )
 
-                metadata = cls.FIELD_METADATA.get(field)
+                metadata = cls.FIELD_METADATA.get(
+                    field
+                )
 
                 if metadata:
                     field_data.update(metadata)
 
                 verified_data[field] = field_data
 
-        guidance = cls.CARD_GUIDANCE.get(card)
+        guidance = cls.CARD_GUIDANCE.get(
+            card
+        )
 
         if guidance:
             verified_data["_guidance"] = guidance
@@ -788,7 +907,9 @@ class LLMInsightService:
         )
 
         if recommendation:
-            verified_data["_recommendation"] = recommendation
+            verified_data[
+                "_recommendation"
+            ] = recommendation
 
         return verified_data
 
@@ -807,12 +928,18 @@ class LLMInsightService:
             if not isinstance(field_data, dict):
                 continue
 
-            interpretation = field_data.get("interpretation")
+            interpretation = field_data.get(
+                "interpretation"
+            )
 
             if isinstance(interpretation, str):
-                allowed_interpretations.append(interpretation.lower())
+                allowed_interpretations.append(
+                    interpretation.lower()
+                )
 
-        interpretation_text = " ".join(allowed_interpretations)
+        interpretation_text = " ".join(
+            allowed_interpretations
+        )
 
         for term in cls.UNSUPPORTED_CLASSIFICATION_TERMS:
             if not re.search(
@@ -820,7 +947,7 @@ class LLMInsightService:
                 normalized_insight,
             ):
                 continue
-
+            
             if re.search(
                 rf"\b{re.escape(term)}\b",
                 interpretation_text,
@@ -830,6 +957,7 @@ class LLMInsightService:
             return True
 
         return False
+
 
     @staticmethod
     def _format_verified_measurement(
@@ -847,9 +975,14 @@ class LLMInsightService:
 
         if field == "precipitation_probability":
             if unit:
-                return f"The chance of precipitation is {value}{unit}."
+                return (
+                    f"The chance of precipitation is "
+                    f"{value}{unit}."
+                )
 
-            return f"The chance of precipitation is {value}."
+            return (
+                f"The chance of precipitation is {value}."
+            )
 
         if not meaning:
             return None
@@ -858,6 +991,7 @@ class LLMInsightService:
             return f"{meaning.capitalize()} is {value} {unit}."
 
         return f"{meaning.capitalize()} is {value}."
+
 
     @classmethod
     def _build_factual_fallback(
@@ -906,7 +1040,9 @@ class LLMInsightService:
         """
 
         persona = (
-            persona_context if persona_context else "No persona context is relevant."
+            persona_context
+            if persona_context
+            else "No persona context is relevant."
         )
         required_cards = [
             card["card"]
@@ -914,15 +1050,18 @@ class LLMInsightService:
             if isinstance(card, dict) and card.get("card")
         ]
 
-        required_cards_text = "\n".join(f"- {card}" for card in required_cards)
+        required_cards_text = "\n".join(
+            f"- {card}"
+            for card in required_cards
+        )
         card_context_blocks = "\n\n".join(
-            (
-                f"CARD: {card['card']}\n"
-                f"VERIFIED DATA: {json.dumps(card['verified_data'], sort_keys=True)}\n"
-                f"REQUIRED: Return exactly one insight for {card['card']}."
-            )
-            for card in cards
-            if isinstance(card, dict) and card.get("card")
+        (
+            f"CARD: {card['card']}\n"
+            f"VERIFIED DATA: {json.dumps(card['verified_data'], sort_keys=True)}\n"
+            f"REQUIRED: Return exactly one insight for {card['card']}."
+        )
+        for card in cards
+        if isinstance(card, dict) and card.get("card")
         )
 
         return f"""
@@ -960,8 +1099,8 @@ STRICT RULES:
     supported by the supplied weather information.
 13. Do not claim certainty when the supplied data is uncertain.
 14. Do not introduce weather conditions that were not supplied.
-15. Each insight should normally contain 2–3 well-written sentences and
-    approximately 50–90 words when sufficient verified data is available.
+15. Each insight should normally contain 2–4 well-written sentences and
+    approximately 60–120 words when sufficient verified data is available.
 16. Prefer useful interpretation over simply repeating numbers.
 17. When appropriate, answer the practical question:
     "What should the user do?"
@@ -1078,8 +1217,8 @@ When information is insufficient for a supported interpretation, return:
 "No specific information is available."
 
 
-28. Each insight should normally contain 2–3 sentences.
-29. Target approximately 50–90 words when the supplied verified data
+28. Each insight should normally contain 2–4 sentences.
+29. Target approximately 60–120 words when the supplied verified data
     supports a useful explanation. Do not add filler merely to increase length.
     
 30. The insight should feel like a premium personalized weather briefing,
