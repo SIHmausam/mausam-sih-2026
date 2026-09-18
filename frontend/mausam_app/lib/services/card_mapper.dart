@@ -26,20 +26,38 @@ class CardDisplayData {
 }
 
 class CardMapper {
-  static CardDisplayData? map(PersonalizedCard card, WeatherData weather) {
+  static CardDisplayData? map(
+    PersonalizedCard card,
+    WeatherData weather, {
+    String temperatureUnit = 'celsius',
+    String windSpeedUnit = 'km/h',
+  }) {
     switch (card.cardId) {
       case 'temperature':
+        final unit = _temperatureSymbol(temperatureUnit);
+        final temperature = _displayTemperature(
+          weather.temperature,
+          temperatureUnit,
+        );
+        final feelsLike = _displayTemperature(
+          weather.apparentTemperature,
+          temperatureUnit,
+        );
+        final dewPoint = _displayTemperature(
+          weather.dewPoint,
+          temperatureUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.thermostat_outlined,
           title: 'Temperature',
-          value: '${weather.temperature.toStringAsFixed(0)}°C',
-          status:
-              'Feels like ${weather.apparentTemperature.toStringAsFixed(0)}°C',
+          value: '${temperature.toStringAsFixed(0)}$unit',
+          status: 'Feels like ${feelsLike.toStringAsFixed(0)}$unit',
           insight: card.insight,
           indicatorColor: _temperatureColor(weather.temperature),
           details: [
-            'Feels like: ${weather.apparentTemperature.toStringAsFixed(1)}°C',
-            'Dew point: ${weather.dewPoint.toStringAsFixed(1)}°C',
+            'Feels like: ${feelsLike.toStringAsFixed(1)}$unit',
+            'Dew point: ${dewPoint.toStringAsFixed(1)}$unit',
             'Cloud cover: ${weather.cloudCover.toStringAsFixed(0)}%',
           ],
         );
@@ -62,6 +80,16 @@ class CardMapper {
         );
 
       case 'humidity':
+        final unit = _temperatureSymbol(temperatureUnit);
+        final dewPoint = _displayTemperature(
+          weather.dewPoint,
+          temperatureUnit,
+        );
+        final feelsLike = _displayTemperature(
+          weather.apparentTemperature,
+          temperatureUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.water_drop_outlined,
           title: 'Humidity',
@@ -70,8 +98,8 @@ class CardMapper {
           insight: card.insight,
           indicatorColor: _humidityColor(weather.humidity),
           details: [
-            'Dew point: ${weather.dewPoint.toStringAsFixed(1)}°C',
-            'Feels like: ${weather.apparentTemperature.toStringAsFixed(1)}°C',
+            'Dew point: ${dewPoint.toStringAsFixed(1)}$unit',
+            'Feels like: ${feelsLike.toStringAsFixed(1)}$unit',
             'Vapour pressure deficit: ${_optional(weather.vapourPressureDeficit, 'kPa')}',
           ],
         );
@@ -98,16 +126,26 @@ class CardMapper {
         );
 
       case 'wind':
+        final unit = _windSpeedSymbol(windSpeedUnit);
+        final windSpeed = _displayWindSpeed(
+          weather.windSpeed,
+          windSpeedUnit,
+        );
+        final gusts = _displayWindSpeed(
+          weather.windGusts,
+          windSpeedUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.air,
           title: 'Wind',
-          value: '${weather.windSpeed.toStringAsFixed(1)} km/h',
+          value: '${windSpeed.toStringAsFixed(1)} $unit',
           status: _windStatus(weather.windSpeed),
           insight: card.insight,
           indicatorColor: _windColor(weather.windSpeed),
           details: [
             'Direction: ${weather.windDirection.toStringAsFixed(0)}°',
-            'Gusts: ${weather.windGusts.toStringAsFixed(1)} km/h',
+            'Gusts: ${gusts.toStringAsFixed(1)} $unit',
             'Visibility: ${_visibilityKm(weather.visibility)} km',
           ],
         );
@@ -150,6 +188,21 @@ class CardMapper {
 
       case 'running_conditions':
         final score = _runningScore(weather);
+        final unit = _temperatureSymbol(temperatureUnit);
+        final windUnit = _windSpeedSymbol(windSpeedUnit);
+        final temperature = _displayTemperature(
+          weather.temperature,
+          temperatureUnit,
+        );
+        final feelsLike = _displayTemperature(
+          weather.apparentTemperature,
+          temperatureUnit,
+        );
+        final windSpeed = _displayWindSpeed(
+          weather.windSpeed,
+          windSpeedUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.directions_run,
           title: 'Running Conditions',
@@ -158,15 +211,23 @@ class CardMapper {
           insight: card.insight,
           indicatorColor: _runningColor(weather),
           details: [
-            'Temperature: ${weather.temperature.toStringAsFixed(1)}°C',
-            'Feels like: ${weather.apparentTemperature.toStringAsFixed(1)}°C',
+            'Temperature: ${temperature.toStringAsFixed(1)}$unit',
+            'Feels like: ${feelsLike.toStringAsFixed(1)}$unit',
             'Humidity: ${weather.humidity.toStringAsFixed(0)}%',
-            'Wind: ${weather.windSpeed.toStringAsFixed(1)} km/h',
+            'Wind: ${windSpeed.toStringAsFixed(1)} $windUnit',
             'UV: ${weather.uvIndex.toStringAsFixed(1)}',
           ],
         );
 
       case 'surf_conditions':
+        final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
+        final seaTemperature = weather.seaSurfaceTemperature == null
+            ? null
+            : _displayTemperature(
+                weather.seaSurfaceTemperature!,
+                temperatureUnit,
+              );
+
         return CardDisplayData(
           icon: Icons.surfing,
           title: 'Surf Conditions',
@@ -185,12 +246,20 @@ class CardMapper {
               'Wave period: ${weather.wavePeriod!.toStringAsFixed(1)} s',
             if (weather.swellWaveHeight != null)
               'Swell height: ${weather.swellWaveHeight!.toStringAsFixed(1)} m',
-            if (weather.seaSurfaceTemperature != null)
-              'Sea temperature: ${weather.seaSurfaceTemperature!.toStringAsFixed(1)}°C',
+            if (seaTemperature != null)
+              'Sea temperature: ${seaTemperature.toStringAsFixed(1)}$temperatureUnitSymbol',
           ],
         );
 
       case 'tide_water':
+        final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
+        final waterTemperature = weather.seaSurfaceTemperature == null
+            ? null
+            : _displayTemperature(
+                weather.seaSurfaceTemperature!,
+                temperatureUnit,
+              );
+
         return CardDisplayData(
           icon: Icons.waves,
           title: 'Tide & Water',
@@ -205,8 +274,8 @@ class CardMapper {
           details: [
             if (weather.seaLevelHeightMsl != null)
               'Sea level: ${weather.seaLevelHeightMsl!.toStringAsFixed(2)} m',
-            if (weather.seaSurfaceTemperature != null)
-              'Water temperature: ${weather.seaSurfaceTemperature!.toStringAsFixed(1)}°C',
+            if (waterTemperature != null)
+              'Water temperature: ${waterTemperature.toStringAsFixed(1)}$temperatureUnitSymbol',
             if (weather.waveHeight != null)
               'Wave height: ${weather.waveHeight!.toStringAsFixed(1)} m',
           ],
@@ -215,6 +284,14 @@ class CardMapper {
       case 'farm_garden':
       case 'soil_moisture':
         if (weather.soilMoisture == null) return null;
+        final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
+        final soilTemperature = weather.soilTemperature0To7cm == null
+            ? null
+            : _displayTemperature(
+                weather.soilTemperature0To7cm!,
+                temperatureUnit,
+              );
+
         return CardDisplayData(
           icon: Icons.grass,
           title: 'Farm & Garden',
@@ -228,14 +305,20 @@ class CardMapper {
               '7–28 cm moisture: ${weather.soilMoisture7To28cm!.toStringAsFixed(1)}%',
             if (weather.soilMoisture28To100cm != null)
               '28–100 cm moisture: ${weather.soilMoisture28To100cm!.toStringAsFixed(1)}%',
-            if (weather.soilTemperature0To7cm != null)
-              'Surface soil temperature: ${weather.soilTemperature0To7cm!.toStringAsFixed(1)}°C',
+            if (soilTemperature != null)
+              'Surface soil temperature: ${soilTemperature.toStringAsFixed(1)}$temperatureUnitSymbol',
             if (weather.evapotranspiration != null)
               'Evapotranspiration: ${weather.evapotranspiration!.toStringAsFixed(1)} mm',
           ],
         );
 
       case 'commute_conditions':
+        final windUnit = _windSpeedSymbol(windSpeedUnit);
+        final windSpeed = _displayWindSpeed(
+          weather.windSpeed,
+          windSpeedUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.directions_car_outlined,
           title: 'Commute Conditions',
@@ -249,61 +332,102 @@ class CardMapper {
           details: [
             'Visibility: ${_visibilityKm(weather.visibility)} km',
             'Rain probability: ${weather.rainProbability.toStringAsFixed(0)}%',
-            'Wind: ${weather.windSpeed.toStringAsFixed(1)} km/h',
+            'Wind: ${windSpeed.toStringAsFixed(1)} $windUnit',
             'Condition: ${weatherCodeToCondition(weather.weatherCode)}',
           ],
         );
 
       case 'travel_conditions':
+        final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
+        final windUnit = _windSpeedSymbol(windSpeedUnit);
+        final temperature = _displayTemperature(
+          weather.temperature,
+          temperatureUnit,
+        );
+        final feelsLike = _displayTemperature(
+          weather.apparentTemperature,
+          temperatureUnit,
+        );
+        final windSpeed = _displayWindSpeed(
+          weather.windSpeed,
+          windSpeedUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.travel_explore,
           title: 'Travel Conditions',
           value: weatherCodeToCondition(weather.weatherCode),
           status:
-              '${weather.temperature.toStringAsFixed(0)}°C • ${weather.humidity.toStringAsFixed(0)}% humidity',
+              '${temperature.toStringAsFixed(0)}$temperatureUnitSymbol • ${weather.humidity.toStringAsFixed(0)}% humidity',
           insight: card.insight,
           indicatorColor: _weatherConditionColor(weather.weatherCode),
           details: [
-            'Feels like: ${weather.apparentTemperature.toStringAsFixed(1)}°C',
+            'Feels like: ${feelsLike.toStringAsFixed(1)}$temperatureUnitSymbol',
             'Visibility: ${_visibilityKm(weather.visibility)} km',
             'Rain probability: ${weather.rainProbability.toStringAsFixed(0)}%',
-            'Wind: ${weather.windSpeed.toStringAsFixed(1)} km/h',
+            'Wind: ${windSpeed.toStringAsFixed(1)} $windUnit',
             'UV: ${weather.uvIndex.toStringAsFixed(1)}',
           ],
         );
 
       case 'family_school':
+        final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
+        final windUnit = _windSpeedSymbol(windSpeedUnit);
+        final temperature = _displayTemperature(
+          weather.temperature,
+          temperatureUnit,
+        );
+        final windSpeed = _displayWindSpeed(
+          weather.windSpeed,
+          windSpeedUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.school_outlined,
           title: 'Family & School',
           value: weatherCodeToCondition(weather.weatherCode),
           status:
-              '${weather.temperature.toStringAsFixed(0)}°C • ${_humidityStatus(weather.humidity)} humidity',
+              '${temperature.toStringAsFixed(0)}$temperatureUnitSymbol • ${_humidityStatus(weather.humidity)} humidity',
           insight: card.insight,
           indicatorColor: _weatherConditionColor(weather.weatherCode),
           details: [
-            'Temperature: ${weather.temperature.toStringAsFixed(1)}°C',
+            'Temperature: ${temperature.toStringAsFixed(1)}$temperatureUnitSymbol',
             'Rain probability: ${weather.rainProbability.toStringAsFixed(0)}%',
             'Visibility: ${_visibilityKm(weather.visibility)} km',
-            'Wind: ${weather.windSpeed.toStringAsFixed(1)} km/h',
+            'Wind: ${windSpeed.toStringAsFixed(1)} $windUnit',
             'UV: ${weather.uvIndex.toStringAsFixed(1)}',
           ],
         );
 
       case 'event_conditions':
+        final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
+        final windUnit = _windSpeedSymbol(windSpeedUnit);
+        final temperature = _displayTemperature(
+          weather.temperature,
+          temperatureUnit,
+        );
+        final feelsLike = _displayTemperature(
+          weather.apparentTemperature,
+          temperatureUnit,
+        );
+        final windSpeed = _displayWindSpeed(
+          weather.windSpeed,
+          windSpeedUnit,
+        );
+
         return CardDisplayData(
           icon: Icons.event_outlined,
           title: 'Event Conditions',
           value: weatherCodeToCondition(weather.weatherCode),
           status:
-              '${weather.temperature.toStringAsFixed(0)}°C • ${weather.rainProbability.toStringAsFixed(0)}% rain',
+              '${temperature.toStringAsFixed(0)}$temperatureUnitSymbol • ${weather.rainProbability.toStringAsFixed(0)}% rain',
           insight: card.insight,
           indicatorColor: _weatherConditionColor(weather.weatherCode),
           details: [
-            'Temperature: ${weather.temperature.toStringAsFixed(1)}°C',
-            'Feels like: ${weather.apparentTemperature.toStringAsFixed(1)}°C',
+            'Temperature: ${temperature.toStringAsFixed(1)}$temperatureUnitSymbol',
+            'Feels like: ${feelsLike.toStringAsFixed(1)}$temperatureUnitSymbol',
             'Rain probability: ${weather.rainProbability.toStringAsFixed(0)}%',
-            'Wind: ${weather.windSpeed.toStringAsFixed(1)} km/h',
+            'Wind: ${windSpeed.toStringAsFixed(1)} $windUnit',
             'Visibility: ${_visibilityKm(weather.visibility)} km',
           ],
         );
@@ -352,6 +476,45 @@ class CardMapper {
     if (moisture <= 65) return 'Good';
     if (moisture <= 80) return 'High';
     return 'Very High';
+  }
+
+  static double _displayTemperature(
+    double celsius,
+    String temperatureUnit,
+  ) {
+    if (temperatureUnit.toLowerCase() == 'fahrenheit') {
+      return (celsius * 9 / 5) + 32;
+    }
+    return celsius;
+  }
+
+  static String _temperatureSymbol(String temperatureUnit) {
+    return temperatureUnit.toLowerCase() == 'fahrenheit' ? '°F' : '°C';
+  }
+
+  static double _displayWindSpeed(
+    double kmh,
+    String windSpeedUnit,
+  ) {
+    switch (windSpeedUnit.toLowerCase()) {
+      case 'm/s':
+        return kmh / 3.6;
+      case 'mph':
+        return kmh / 1.609344;
+      default:
+        return kmh;
+    }
+  }
+
+  static String _windSpeedSymbol(String windSpeedUnit) {
+    switch (windSpeedUnit.toLowerCase()) {
+      case 'm/s':
+        return 'm/s';
+      case 'mph':
+        return 'mph';
+      default:
+        return 'km/h';
+    }
   }
 
   static String _windStatus(double wind) {

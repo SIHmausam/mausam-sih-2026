@@ -1461,6 +1461,8 @@ PageRouteBuilder<void> _weatherDetailRoute({
   required CardDisplayData card,
   required String persona,
   required WeatherData weather,
+  required String temperatureUnit,
+  required String windSpeedUnit,
 }) {
   return PageRouteBuilder<void>(
     opaque: true,
@@ -1470,6 +1472,8 @@ PageRouteBuilder<void> _weatherDetailRoute({
         card: card,
         persona: persona,
         weather: weather,
+        temperatureUnit: temperatureUnit,
+        windSpeedUnit: windSpeedUnit,
       );
     },
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -1525,12 +1529,16 @@ class WeatherDetailScreen extends StatelessWidget {
   final CardDisplayData card;
   final String persona;
   final WeatherData weather;
+  final String temperatureUnit;
+  final String windSpeedUnit;
 
   const WeatherDetailScreen({
     super.key,
     required this.card,
     required this.persona,
     required this.weather,
+    this.temperatureUnit = 'celsius',
+    this.windSpeedUnit = 'km/h',
   });
 
   String _meaningForCard() {
@@ -2055,6 +2063,18 @@ class WeatherDetailScreen extends StatelessWidget {
         'exposure and stay hydrated.';
   }
 
+  double _displayTemperature(double celsius) {
+    if (temperatureUnit.toLowerCase() == 'fahrenheit') {
+      return (celsius * 9 / 5) + 32;
+    }
+
+    return celsius;
+  }
+
+  String _temperatureUnitSymbol() {
+    return temperatureUnit.toLowerCase() == 'fahrenheit' ? '°F' : '°C';
+  }
+
   Widget _temperatureContent() {
     if (card.title != 'Temperature') {
       return const SizedBox.shrink();
@@ -2063,6 +2083,10 @@ class WeatherDetailScreen extends StatelessWidget {
     final temp = weather.temperature;
     final feelsLike = weather.apparentTemperature;
     final difference = feelsLike - temp;
+    final displayTemp = _displayTemperature(temp);
+    final displayFeelsLike = _displayTemperature(feelsLike);
+    final displayDifference =
+        _displayTemperature(difference) - _displayTemperature(0);
 
     return Column(
       children: [
@@ -2093,7 +2117,7 @@ class WeatherDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 7),
                       Text(
-                        '${temp.toStringAsFixed(0)}°C',
+                        '${displayTemp.toStringAsFixed(0)}${_temperatureUnitSymbol()}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 24,
@@ -2128,7 +2152,7 @@ class WeatherDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 7),
                       Text(
-                        '${feelsLike.toStringAsFixed(0)}°C',
+                        '${displayFeelsLike.toStringAsFixed(0)}${_temperatureUnitSymbol()}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 24,
@@ -2176,7 +2200,7 @@ class WeatherDetailScreen extends StatelessWidget {
               ),
               if (difference.abs() >= 1)
                 Text(
-                  '${difference > 0 ? '+' : ''}${difference.toStringAsFixed(0)}°C feels',
+                  '${displayDifference > 0 ? '+' : ''}${displayDifference.toStringAsFixed(0)}${_temperatureUnitSymbol()} feels',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 13,
@@ -2574,12 +2598,36 @@ class WeatherDetailScreen extends StatelessWidget {
         'and consider avoiding exposed areas.';
   }
 
+  double _displayWindSpeed(double kmh) {
+    switch (windSpeedUnit.toLowerCase()) {
+      case 'm/s':
+        return kmh / 3.6;
+      case 'mph':
+        return kmh / 1.609344;
+      default:
+        return kmh;
+    }
+  }
+
+  String _windSpeedSymbol() {
+    switch (windSpeedUnit.toLowerCase()) {
+      case 'm/s':
+        return 'm/s';
+      case 'mph':
+        return 'mph';
+      default:
+        return 'km/h';
+    }
+  }
+
   Widget _windContent() {
     if (card.title != 'Wind') {
       return const SizedBox.shrink();
     }
 
     final wind = weather.windSpeed;
+    final windUnit = _windSpeedSymbol();
+    final displayWind = _displayWindSpeed(wind);
 
     return Column(
       children: [
@@ -2610,7 +2658,7 @@ class WeatherDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 7),
                       Text(
-                        '${wind.toStringAsFixed(0)} km/h',
+                        '${displayWind.toStringAsFixed(0)} $windUnit',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 23,
@@ -2692,7 +2740,7 @@ class WeatherDetailScreen extends StatelessWidget {
                 ),
               ),
               Text(
-                '${wind.toStringAsFixed(0)} km/h',
+                '${displayWind.toStringAsFixed(0)} $windUnit',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.55),
                   fontSize: 13,
@@ -4557,11 +4605,30 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   late String _activePersona;
+  String _temperatureUnit = 'celsius';
+  String _windSpeedUnit = 'km/h';
+
+  final PreferencesApiService _preferencesApiService = PreferencesApiService();
 
   @override
   void initState() {
     super.initState();
     _activePersona = widget.persona;
+    _loadTemperatureUnit();
+  }
+
+  Future<void> _loadTemperatureUnit() async {
+    try {
+      final preferences = await _preferencesApiService.getPreferences();
+
+      if (!mounted) return;
+
+      setState(() {
+        _temperatureUnit = preferences.temperatureUnit ?? 'celsius';
+      });
+    } catch (_) {
+      // Keep Celsius as the safe display default if preferences cannot load.
+    }
   }
 
   void _selectPage(int index) {
@@ -4614,7 +4681,26 @@ class _MainShellState extends State<MainShell> {
             Navigator.pop(context);
             Navigator.push(
               context,
-              _darkRoute(page: SettingsPage(onPersonaChanged: _updatePersona)),
+              _darkRoute(
+                page: SettingsPage(
+                  initialWindSpeedUnit: _windSpeedUnit,
+                  onPersonaChanged: _updatePersona,
+                  onTemperatureUnitChanged: (unit) {
+                    if (!mounted) return;
+
+                    setState(() {
+                      _temperatureUnit = unit;
+                    });
+                  },
+                  onWindSpeedChanged: (unit) {
+                    if (!mounted) return;
+
+                    setState(() {
+                      _windSpeedUnit = unit;
+                    });
+                  },
+                ),
+              ),
             );
           },
         );
@@ -4642,9 +4728,14 @@ class _MainShellState extends State<MainShell> {
       showBottomNav: false,
       onMenuTap: _openMenu,
       persona: _activePersona,
+      temperatureUnit: _temperatureUnit,
+      windSpeedUnit: _windSpeedUnit,
     ),
     const RoutinesScreen(),
-    const WeatherMapScreen(),
+    WeatherMapScreen(
+      temperatureUnit: _temperatureUnit,
+      windSpeedUnit: _windSpeedUnit,
+    ),
     ProfilePage(persona: _activePersona, onPersonaChanged: _updatePersona),
   ];
 
@@ -5128,12 +5219,16 @@ class HomeScreen extends StatefulWidget {
   final bool showBottomNav;
   final VoidCallback? onMenuTap;
   final String persona;
+  final String temperatureUnit;
+  final String windSpeedUnit;
 
   const HomeScreen({
     super.key,
     this.showBottomNav = true,
     this.onMenuTap,
     this.persona = 'Fitness Enthusiast',
+    this.temperatureUnit = 'celsius',
+    this.windSpeedUnit = 'km/h',
   });
 
   @override
@@ -5388,21 +5483,17 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     try {
-      final cards =
-          await PersonalizationApiService.getPersonalizedCards(
+      final cards = await PersonalizationApiService.getPersonalizedCards(
         latitude: latitude,
         longitude: longitude,
         city: city,
       );
 
-      if (!mounted ||
-          requestId != _personalizationRequestId) {
+      if (!mounted || requestId != _personalizationRequestId) {
         return;
       }
 
-      final mergedCards = <PersonalizedCard>[
-        ...cards,
-      ];
+      final mergedCards = <PersonalizedCard>[...cards];
 
       const fallbackIds = <String>[
         'temperature',
@@ -5423,9 +5514,7 @@ class _HomeScreenState extends State<HomeScreen>
       ];
 
       for (final id in fallbackIds) {
-        if (!mergedCards.any(
-          (card) => _canonicalCardId(card.cardId) == id,
-        )) {
+        if (!mergedCards.any((card) => _canonicalCardId(card.cardId) == id)) {
           mergedCards.add(
             PersonalizedCard(
               cardId: id,
@@ -5459,16 +5548,14 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       );
     } catch (_) {
-      if (!mounted ||
-          requestId != _personalizationRequestId) {
+      if (!mounted || requestId != _personalizationRequestId) {
         return;
       }
 
       // Cold-start/mock cards are now used ONLY when
       // real personalization genuinely fails.
       setState(() {
-        _personalizedCards =
-            MockWeatherService.getPersonalizedCards(
+        _personalizedCards = MockWeatherService.getPersonalizedCards(
           widget.persona,
         );
 
@@ -5489,9 +5576,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     try {
-      final insights =
-          await PersonalizationApiService
-              .getPersonalizedInsights(
+      final insights = await PersonalizationApiService.getPersonalizedInsights(
         latitude: latitude,
         longitude: longitude,
         city: city,
@@ -5505,19 +5590,14 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       setState(() {
-        _personalizedCards =
-            _personalizedCards.map((card) {
-          final newInsight =
-              insights[card.cardId];
+        _personalizedCards = _personalizedCards.map((card) {
+          final newInsight = insights[card.cardId];
 
-          if (newInsight == null ||
-              newInsight.isEmpty) {
+          if (newInsight == null || newInsight.isEmpty) {
             return card;
           }
 
-          return card.copyWith(
-            insight: newInsight,
-          );
+          return card.copyWith(insight: newInsight);
         }).toList();
       });
     } catch (_) {
@@ -5643,7 +5723,14 @@ class _HomeScreenState extends State<HomeScreen>
         final personalizedCards = _personalizedCards;
 
         final mappedCards = personalizedCards
-            .map((card) => CardMapper.map(card, weather))
+            .map(
+              (card) => CardMapper.map(
+                card,
+                weather,
+                temperatureUnit: widget.temperatureUnit,
+                windSpeedUnit: widget.windSpeedUnit,
+              ),
+            )
             .whereType<CardDisplayData>()
             .toList();
 
@@ -5700,7 +5787,10 @@ class _HomeScreenState extends State<HomeScreen>
 
                           const SizedBox(height: 24),
 
-                          MainWeather(weather: weather),
+                          MainWeather(
+                            weather: weather,
+                            temperatureUnit: widget.temperatureUnit,
+                          ),
 
                           if (homepageAlert != null) ...[
                             const SizedBox(height: 18),
@@ -5725,9 +5815,7 @@ class _HomeScreenState extends State<HomeScreen>
                           else ...[
                             ...forYouCards.map(
                               (card) => Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: 12,
-                                ),
+                                padding: const EdgeInsets.only(bottom: 12),
                                 child: ExpandableWeatherCard(
                                   card: card,
                                   featured: true,
@@ -5737,6 +5825,8 @@ class _HomeScreenState extends State<HomeScreen>
                                         card: card,
                                         persona: widget.persona,
                                         weather: weather,
+                                        temperatureUnit: widget.temperatureUnit,
+                                        windSpeedUnit: widget.windSpeedUnit,
                                       ),
                                     );
                                   },
@@ -5747,17 +5837,13 @@ class _HomeScreenState extends State<HomeScreen>
                             if (otherWeatherCards.isNotEmpty) ...[
                               const SizedBox(height: 16),
 
-                              SectionTitle(
-                                title: 'OTHER WEATHER',
-                              ),
+                              SectionTitle(title: 'OTHER WEATHER'),
 
                               const SizedBox(height: 12),
 
                               ...otherWeatherCards.map(
                                 (card) => Padding(
-                                  padding: const EdgeInsets.only(
-                                    bottom: 10,
-                                  ),
+                                  padding: const EdgeInsets.only(bottom: 10),
                                   child: ExpandableWeatherCard(
                                     card: card,
                                     featured: false,
@@ -5767,6 +5853,9 @@ class _HomeScreenState extends State<HomeScreen>
                                           card: card,
                                           persona: widget.persona,
                                           weather: weather,
+                                          temperatureUnit:
+                                              widget.temperatureUnit,
+                                          windSpeedUnit: widget.windSpeedUnit,
                                         ),
                                       );
                                     },
@@ -5778,12 +5867,18 @@ class _HomeScreenState extends State<HomeScreen>
 
                           if (weather.hourly.isNotEmpty) ...[
                             const SizedBox(height: 28),
-                            HourlyForecast(hourly: weather.hourly),
+                            HourlyForecast(
+                              hourly: weather.hourly,
+                              temperatureUnit: widget.temperatureUnit,
+                            ),
                           ],
 
                           if (weather.daily.isNotEmpty) ...[
                             const SizedBox(height: 28),
-                            DailyForecast(daily: weather.daily),
+                            DailyForecast(
+                              daily: weather.daily,
+                              temperatureUnit: widget.temperatureUnit,
+                            ),
                           ],
 
                           const SizedBox(height: 34),
@@ -5888,8 +5983,7 @@ class _WeatherLoadingView extends StatelessWidget {
   }
 }
 
-class _PersonalizationLoadingCards
-    extends StatelessWidget {
+class _PersonalizationLoadingCards extends StatelessWidget {
   const _PersonalizationLoadingCards();
 
   @override
@@ -5898,29 +5992,18 @@ class _PersonalizationLoadingCards
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 18,
-            vertical: 18,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(
-              alpha: 0.07,
-            ),
-            borderRadius:
-                BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(
-                alpha: 0.10,
-              ),
-            ),
+            color: Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
           ),
           child: Row(
             children: [
               const SizedBox(
                 width: 20,
                 height: 20,
-                child:
-                    CircularProgressIndicator(
+                child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: Colors.white,
                 ),
@@ -5930,16 +6013,14 @@ class _PersonalizationLoadingCards
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       'Personalizing your weather',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 14,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
 
@@ -5948,10 +6029,7 @@ class _PersonalizationLoadingCards
                     Text(
                       'Ranking the conditions that matter most to you...',
                       style: TextStyle(
-                        color: Colors.white
-                            .withValues(
-                              alpha: 0.55,
-                            ),
+                        color: Colors.white.withValues(alpha: 0.55),
                         fontSize: 12,
                       ),
                     ),
@@ -5967,26 +6045,14 @@ class _PersonalizationLoadingCards
         ...List.generate(
           3,
           (_) => Padding(
-            padding:
-                const EdgeInsets.only(
-              bottom: 10,
-            ),
+            padding: const EdgeInsets.only(bottom: 10),
             child: Container(
               height: 96,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.white
-                    .withValues(
-                      alpha: 0.045,
-                    ),
-                borderRadius:
-                    BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white
-                      .withValues(
-                        alpha: 0.07,
-                      ),
-                ),
+                color: Colors.white.withValues(alpha: 0.045),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
               ),
             ),
           ),
@@ -7326,22 +7392,60 @@ class TopBar extends StatelessWidget {
 
 class MainWeather extends StatelessWidget {
   final WeatherData weather;
+  final String temperatureUnit;
 
-  const MainWeather({super.key, required this.weather});
+  const MainWeather({
+    super.key,
+    required this.weather,
+    this.temperatureUnit = 'celsius',
+  });
+
+  double _displayTemperature(double celsius) {
+    if (temperatureUnit.toLowerCase() == 'fahrenheit') {
+      return (celsius * 9 / 5) + 32;
+    }
+
+    return celsius;
+  }
+
+  String _temperatureUnitSymbol() {
+    return temperatureUnit.toLowerCase() == 'fahrenheit' ? '°F' : '°C';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final temperature = _displayTemperature(weather.temperature);
+    final feelsLike = _displayTemperature(weather.apparentTemperature);
+    final unit = _temperatureUnitSymbol();
+
     return Column(
       children: [
-        Text(
-          '${weather.temperature.round()}°',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 92,
-            height: 0.95,
-            fontWeight: FontWeight.w300,
-            letterSpacing: -4,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${temperature.round()}',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 92,
+                height: 0.95,
+                fontWeight: FontWeight.w300,
+                letterSpacing: -4,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                unit,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  fontSize: 30,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
         ),
 
         const SizedBox(height: 8),
@@ -7385,7 +7489,7 @@ class MainWeather extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Feels like ${weather.apparentTemperature.round()}°',
+                    'Feels like ${feelsLike.round()}$unit',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 15,
@@ -8569,8 +8673,17 @@ class _PersonaOption extends StatelessWidget {
 
 class SettingsPage extends StatefulWidget {
   final ValueChanged<String>? onPersonaChanged;
+  final ValueChanged<String>? onTemperatureUnitChanged;
+  final ValueChanged<String>? onWindSpeedChanged;
+  final String initialWindSpeedUnit;
 
-  const SettingsPage({super.key, this.onPersonaChanged});
+  const SettingsPage({
+    super.key,
+    this.onPersonaChanged,
+    this.onTemperatureUnitChanged,
+    this.onWindSpeedChanged,
+    this.initialWindSpeedUnit = 'km/h',
+  });
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -8578,6 +8691,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final PreferencesApiService _preferencesApiService = PreferencesApiService();
+  final LocationApiService _locationApiService = LocationApiService();
+  final LocationService _locationService = LocationService();
 
   final AuthSessionService _authSessionService = AuthSessionService();
 
@@ -8640,6 +8755,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   UserPreferences? _preferences;
   bool _isLoadingPreferences = true;
+  bool _isLoadingSavedLocations = true;
+  List<SavedLocation> _savedLocations = const [];
+  bool _isLoadingCurrentLocation = true;
+  String? _currentLocationName;
   bool _isSaving = false;
   String? _preferencesError;
 
@@ -8665,7 +8784,61 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    windSpeed = widget.initialWindSpeedUnit;
     _loadPreferences();
+    _loadSavedLocations();
+    _loadCurrentLocation();
+  }
+
+  Future<void> _loadCurrentLocation() async {
+    try {
+      if (!await _locationService.hasLocationAccess()) {
+        if (!mounted) return;
+
+        setState(() {
+          _currentLocationName = null;
+          _isLoadingCurrentLocation = false;
+        });
+        return;
+      }
+
+      final position = await _locationService.getCurrentLocation();
+      final name = await _locationService.getLocationName(position);
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentLocationName = name;
+        _isLoadingCurrentLocation = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _currentLocationName = null;
+        _isLoadingCurrentLocation = false;
+      });
+    }
+  }
+
+  Future<void> _loadSavedLocations() async {
+    try {
+      final locations = await _locationApiService.getLocations();
+
+      if (!mounted) return;
+
+      setState(() {
+        _savedLocations = locations.take(10).toList();
+        _isLoadingSavedLocations = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _savedLocations = const [];
+        _isLoadingSavedLocations = false;
+      });
+    }
   }
 
   Future<void> _loadPreferences() async {
@@ -8959,16 +9132,25 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: Column(
                     children: [
                       _GlassActionRow(
-                        title: 'Primary Location',
-                        value: location,
-                        subtitle: 'Used for your default weather updates',
-                        icon: Icons.location_on_outlined,
+                        title: 'Current Location',
+                        value: _isLoadingCurrentLocation
+                            ? 'Detecting location...'
+                            : (_currentLocationName ??
+                                  'Location access required'),
+                        subtitle:
+                            _currentLocationName == null &&
+                                !_isLoadingCurrentLocation
+                            ? 'Enable location access to detect your location'
+                            : 'Based on your device location',
+                        icon: Icons.my_location_rounded,
                         onTap: _changeLocation,
                       ),
                       const _GlassDivider(),
                       _GlassActionRow(
                         title: 'Manage Saved Locations',
-                        value: '3 Saved',
+                        value: _isLoadingSavedLocations
+                            ? 'Loading...'
+                            : '${_savedLocations.length} Saved',
                         subtitle: 'Quickly access places you check often',
                         icon: Icons.bookmark_border_rounded,
                         onTap: _manageLocations,
@@ -9069,15 +9251,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           'Your preferences are used to improve your personalized Mausam experience.',
                         ),
                       ),
-                      const _GlassDivider(),
-                      _GlassActionRow(
-                        title: 'IMD Attribution',
-                        icon: Icons.cloud_outlined,
-                        onTap: () => _showInfo(
-                          'IMD Attribution',
-                          'Weather information is presented using data associated with the India Meteorological Department.',
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -9087,7 +9260,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 SizedBox(
                   height: 50,
                   child: OutlinedButton(
-                    onPressed: _signOut,
+                    onPressed: _isSigningOut ? null : _confirmSignOut,
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
                         color: Colors.white.withValues(alpha: 0.22),
@@ -9096,15 +9269,22 @@ class _SettingsPageState extends State<SettingsPage> {
                         borderRadius: BorderRadius.circular(18),
                       ),
                       backgroundColor: Colors.white.withValues(alpha: 0.06),
+                      disabledForegroundColor: Colors.white54,
                     ),
-                    child: const Text(
-                      'Sign Out',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _isSigningOut
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Sign Out',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -9553,22 +9733,57 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _changeLocation() {
-    _showChoiceSheet(
-      title: 'Primary Location',
-      options: const ['Ghaziabad, UP', 'Delhi', 'Noida', 'Lucknow'],
-      selected: location,
-      onSelected: (value) => setState(() => location = value),
-    );
+  Future<void> _changeLocation() async {
+    setState(() {
+      _isLoadingCurrentLocation = true;
+    });
+
+    await _loadCurrentLocation();
+
+    if (!mounted) return;
+
+    if (_currentLocationName == null) {
+      _showInfo(
+        'Location access required',
+        'Enable location access on your device to detect your current location.',
+      );
+    }
   }
 
-  void _manageLocations() {
-    _showChoiceSheet(
-      title: 'Saved Locations',
-      options: const ['Ghaziabad, UP', 'Delhi', 'Noida'],
-      selected: location,
-      onSelected: (value) => setState(() => location = value),
+  Future<void> _manageLocations() async {
+    await Navigator.of(context).push<SelectedLocation>(
+      PageRouteBuilder<SelectedLocation>(
+        opaque: true,
+        barrierColor: const Color(0xFF101C2C),
+        transitionDuration: const Duration(milliseconds: 450),
+        reverseTransitionDuration: const Duration(milliseconds: 350),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return LocationSearchScreen(
+            currentLocation: location,
+            defaultLocations: const {},
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          );
+
+          return FadeTransition(
+            opacity: curvedAnimation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.025),
+                end: Offset.zero,
+              ).animate(curvedAnimation),
+              child: child,
+            ),
+          );
+        },
+      ),
     );
+
+    await _loadSavedLocations();
   }
 
   void _weatherAlertSettings() {
@@ -9613,7 +9828,57 @@ class _SettingsPageState extends State<SettingsPage> {
       title: 'Temperature Unit',
       options: const ['Celsius (°C)', 'Fahrenheit (°F)'],
       selected: temperatureUnit,
-      onSelected: (value) => setState(() => temperatureUnit = value),
+      onSelected: (value) async {
+        if (_preferences == null || _isSaving) return;
+
+        final previous = temperatureUnit;
+        final apiValue = value.startsWith('Fahrenheit')
+            ? 'fahrenheit'
+            : 'celsius';
+
+        setState(() {
+          temperatureUnit = value;
+          _isSaving = true;
+        });
+
+        try {
+          final updated = await _preferencesApiService.updatePreferences(
+            temperatureUnit: apiValue,
+          );
+
+          if (!mounted) return;
+
+          setState(() {
+            _preferences = updated;
+            temperatureUnit = _displayTemperatureUnit(updated.temperatureUnit);
+            _isSaving = false;
+            _preferencesError = null;
+          });
+
+          widget.onTemperatureUnitChanged?.call(
+            updated.temperatureUnit ?? 'celsius',
+          );
+        } catch (error) {
+          if (!mounted) return;
+
+          setState(() {
+            temperatureUnit = previous;
+            _isSaving = false;
+            _preferencesError = error.toString().replaceFirst(
+              'Exception: ',
+              '',
+            );
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_preferencesError!),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFF263B52),
+            ),
+          );
+        }
+      },
     );
   }
 
@@ -9622,7 +9887,10 @@ class _SettingsPageState extends State<SettingsPage> {
       title: 'Wind Speed',
       options: const ['km/h', 'm/s', 'mph'],
       selected: windSpeed,
-      onSelected: (value) => setState(() => windSpeed = value),
+      onSelected: (value) {
+        setState(() => windSpeed = value);
+        widget.onWindSpeedChanged?.call(value);
+      },
     );
   }
 
@@ -9692,18 +9960,199 @@ class _SettingsPageState extends State<SettingsPage> {
   void _showInfo(String title, String message) {
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF263B52),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        content: Text(message, style: const TextStyle(color: Colors.white70)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(color: Colors.white)),
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B3048).withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.28),
+                blurRadius: 28,
+                offset: const Offset(0, 14),
+              ),
+            ],
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      color: Colors.white.withValues(alpha: 0.86),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    splashRadius: 20,
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: Colors.white.withValues(alpha: 0.58),
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                message,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  fontSize: 14,
+                  height: 1.55,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  Future<void> _confirmSignOut() async {
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1B3048).withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.28),
+                blurRadius: 28,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.logout_rounded,
+                      color: Colors.white.withValues(alpha: 0.86),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Are you sure you want to sign out of Mausam?',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  fontSize: 14,
+                  height: 1.55,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.62),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (shouldSignOut == true && mounted) {
+      await _signOut();
+    }
   }
 
   Future<void> _signOut() async {
@@ -9865,26 +10314,32 @@ class _GlassActionRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (value != null) ...[
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    value!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.58),
-                      fontSize: 12,
+              const SizedBox(width: 12),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (value != null) ...[
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 150),
+                      child: Text(
+                        value!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.58),
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
+                    const SizedBox(width: 6),
+                  ],
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.white.withValues(alpha: 0.38),
+                    size: 19,
                   ),
-                ),
-              ],
-              const SizedBox(width: 6),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.white.withValues(alpha: 0.38),
-                size: 19,
+                ],
               ),
             ],
           ),
