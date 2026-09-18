@@ -43,6 +43,9 @@ class DailyWeather {
   final double apparentTemperatureMin;
   final DateTime? sunrise;
   final DateTime? sunset;
+  final DateTime? moonrise;
+  final DateTime? moonset;
+  final double? moonPhase;
   final double precipitationSum;
   final double rainSum;
   final double rainProbabilityMax;
@@ -58,6 +61,9 @@ class DailyWeather {
     required this.apparentTemperatureMin,
     required this.sunrise,
     required this.sunset,
+    this.moonrise,
+    this.moonset,
+    this.moonPhase,
     required this.precipitationSum,
     required this.rainSum,
     required this.rainProbabilityMax,

@@ -860,8 +860,6 @@ class _RoutineFormScreenState extends State<RoutineFormScreen> {
                     const SizedBox(height: 18),
                     _buildTimeSection(),
                     const SizedBox(height: 18),
-                    _buildDurationSection(),
-                    const SizedBox(height: 18),
                     _buildLocationSection(),
                     const SizedBox(height: 18),
                     _buildEnabledSection(),
@@ -1111,48 +1109,6 @@ class _RoutineFormScreenState extends State<RoutineFormScreen> {
     );
   }
 
-  Widget _buildDurationSection() {
-    return _GlassSection(
-      title: 'Duration',
-      icon: Icons.timer_outlined,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                '$_durationMinutes min',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '5–720 min',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.48),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            value: _durationMinutes.toDouble(),
-            min: 5,
-            max: 720,
-            divisions: 143,
-            onChanged: (value) {
-              setState(() {
-                _durationMinutes = value.round();
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildLocationSection() {
     return _GlassSection(
       title: 'Location',
@@ -1168,6 +1124,7 @@ class _RoutineFormScreenState extends State<RoutineFormScreen> {
           else if (_locations.isNotEmpty) ...[
             DropdownButtonFormField<String?>(
               initialValue: _selectedLocation?.id,
+              isExpanded: true,
               dropdownColor: const Color(0xFF17283A),
               decoration: _inputDecoration(
                 'Choose a saved location',

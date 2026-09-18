@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -32,6 +33,7 @@ import 'screens/weather_map_screen.dart';
 import 'widgets/priority_card.dart';
 import 'widgets/weather_effects.dart';
 import 'widgets/severe_alert_poster.dart';
+import 'widgets/sun_moon_path.dart';
 import 'widgets/hourly_forecast.dart';
 import 'widgets/daily_forecast.dart';
 import 'widgets/mascot_entry_point.dart';
@@ -3751,7 +3753,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     icon: const Icon(
-                      Icons.arrow_back_rounded,
+                      Icons.arrow_upward_rounded,
                       color: Colors.white,
                       size: 25,
                     ),
@@ -4731,7 +4733,7 @@ class _MainShellState extends State<MainShell> {
       temperatureUnit: _temperatureUnit,
       windSpeedUnit: _windSpeedUnit,
     ),
-    const RoutinesScreen(),
+    RoutinesScreen(onMenuTap: _openMenu),
     WeatherMapScreen(
       temperatureUnit: _temperatureUnit,
       windSpeedUnit: _windSpeedUnit,
@@ -5879,6 +5881,8 @@ class _HomeScreenState extends State<HomeScreen>
                               daily: weather.daily,
                               temperatureUnit: widget.temperatureUnit,
                             ),
+                            const SizedBox(height: 28),
+                            SunMoonPath(daily: weather.daily.first),
                           ],
 
                           const SizedBox(height: 34),
@@ -7468,40 +7472,125 @@ class MainWeather extends StatelessWidget {
 
         const SizedBox(height: 12),
 
-        ClipRRect(
-          borderRadius: BorderRadius.circular(30),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.thermostat_outlined,
-                    color: Colors.white,
-                    size: 19,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 9,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Feels like ${feelsLike.round()}$unit',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.35),
                     ),
                   ),
-                ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.thermostat_outlined,
+                        color: Colors.white,
+                        size: 19,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Feels like ${feelsLike.round()}$unit',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 14),
+            _HeroWindIndicator(
+              direction: weather.windDirection,
+              speed: weather.windSpeed,
+              unit: 'km/h',
+            ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+class _HeroWindIndicator extends StatelessWidget {
+  final double direction;
+  final double speed;
+  final String unit;
+
+  const _HeroWindIndicator({
+    required this.direction,
+    required this.speed,
+    required this.unit,
+  });
+
+  String _directionLabel(double degrees) {
+    final normalized = ((degrees % 360) + 360) % 360;
+    const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+    final index = ((normalized + 22.5) / 45).floor() % 8;
+    return labels[index];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = ((direction % 360) + 360) % 360;
+    final directionLabel = _directionLabel(normalized);
+
+    // Meteorological wind direction describes where the wind comes from.
+    // The arrow therefore points back toward the source direction.
+    final arrowAngle = normalized * math.pi / 180;
+
+    return SizedBox(
+      width: 58,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Transform.rotate(
+            angle: arrowAngle,
+            child: Icon(
+              Icons.arrow_back_rounded,
+              size: 21,
+              color: Colors.white.withValues(alpha: 0.78),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            directionLabel,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.68),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 1),
+          Text(
+            '${speed.toStringAsFixed(0)} $unit',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.52),
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

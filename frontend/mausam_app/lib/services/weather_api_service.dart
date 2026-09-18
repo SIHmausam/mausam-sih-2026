@@ -243,6 +243,9 @@ class WeatherApiService {
             ),
             sunrise: _toDateTimeOrNull(item['sunrise']),
             sunset: _toDateTimeOrNull(item['sunset']),
+            moonrise: _toDateTimeOrNull(item['moonrise']),
+            moonset: _toDateTimeOrNull(item['moonset']),
+            moonPhase: _toDoubleOrNull(item['moon_phase']),
             precipitationSum:
                 _toDoubleOrZero(item['precipitation_sum']),
             rainSum: _toDoubleOrZero(item['rain_sum']),

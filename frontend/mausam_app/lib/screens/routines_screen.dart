@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../models/routine.dart';
@@ -5,7 +7,9 @@ import 'routine_form_screen.dart';
 import '../services/routine_api_service.dart';
 
 class RoutinesScreen extends StatefulWidget {
-  const RoutinesScreen({super.key});
+  final VoidCallback? onMenuTap;
+
+  const RoutinesScreen({super.key, this.onMenuTap});
 
   @override
   State<RoutinesScreen> createState() => _RoutinesScreenState();
@@ -199,7 +203,7 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
         const _RoutinesBackground(),
         SafeArea(child: _buildContent()),
         Positioned(
-          right: 20,
+          left: 20,
           bottom: 92,
           child: _GlassAddButton(
             onPressed: () async {
@@ -235,14 +239,14 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
     if (_isLoading) {
       return SingleChildScrollView(
         physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 30, 20, 150),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 150),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _PageHeader(
+            _PageHeader(
+              onMenuTap: widget.onMenuTap,
               title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
-              icon: Icons.calendar_today_rounded,
             ),
             const SizedBox(height: 28),
             const SizedBox(
@@ -256,14 +260,14 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
 
     if (_errorMessage != null) {
       return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 30, 20, 150),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 150),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _PageHeader(
+            _PageHeader(
+              onMenuTap: widget.onMenuTap,
               title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
-              icon: Icons.calendar_today_rounded,
             ),
             const SizedBox(height: 28),
             _GlassMessageCard(
@@ -280,14 +284,14 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
 
     if (_routines.isEmpty) {
       return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 30, 20, 150),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 150),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _PageHeader(
+            _PageHeader(
+              onMenuTap: widget.onMenuTap,
               title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
-              icon: Icons.calendar_today_rounded,
             ),
             const SizedBox(height: 28),
             _GlassMessageCard(
@@ -306,15 +310,15 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
       onRefresh: _loadRoutines,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 30, 20, 150),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 150),
         itemCount: _routines.length + 1,
         separatorBuilder: (_, _) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
           if (index == 0) {
-            return const _PageHeader(
+            return _PageHeader(
+              onMenuTap: widget.onMenuTap,
               title: 'Routines',
               subtitle: 'Your routines and weather-aware plans',
-              icon: Icons.calendar_today_rounded,
             );
           }
 
@@ -404,61 +408,85 @@ class _RoutinesBackground extends StatelessWidget {
 }
 
 class _PageHeader extends StatelessWidget {
+  final VoidCallback? onMenuTap;
   final String title;
   final String subtitle;
-  final IconData icon;
 
   const _PageHeader({
+    required this.onMenuTap,
     required this.title,
     required this.subtitle,
-    required this.icon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.10),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+    return SizedBox(
+      height: 58,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: _RoutineMenuButton(onTap: onMenuTap ?? () {}),
           ),
-          child: Icon(
-            icon,
-            color: Colors.white.withValues(alpha: 0.90),
-            size: 24,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    fontSize: 12.5,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutineMenuButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _RoutineMenuButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.24),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+            ),
+            child: const Icon(Icons.menu, color: Colors.white, size: 27),
           ),
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.62),
-                  fontSize: 13,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -472,41 +500,47 @@ class _GlassAddButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 13),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.11),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: InkWell(
+            onTap: onPressed,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.16),
-                blurRadius: 20,
-                spreadRadius: 1,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 13),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.30),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.30),
+                    blurRadius: 28,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.add_rounded,
-                size: 20,
-                color: Colors.white.withValues(alpha: 0.90),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.add_rounded,
+                    size: 20,
+                    color: Colors.white.withValues(alpha: 0.90),
+                  ),
+                  const SizedBox(width: 7),
+                  const Text(
+                    'Add Routine',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 7),
-              const Text(
-                'Add Routine',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -627,133 +661,138 @@ class _RoutineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.085),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 18,
-            spreadRadius: 1,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  routine.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Switch(value: routine.isEnabled, onChanged: (_) => onToggle()),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                Icons.schedule_rounded,
-                size: 18,
-                color: Colors.white.withValues(alpha: 0.72),
-              ),
-              const SizedBox(width: 7),
-              Text(
-                formattedTime,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.82),
-                  fontSize: 15,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Icon(
-                Icons.category_outlined,
-                size: 18,
-                color: Colors.white.withValues(alpha: 0.72),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  formattedActivity,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    fontSize: 15,
-                  ),
-                ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.075),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.10),
+                blurRadius: 18,
+                spreadRadius: 1,
               ),
             ],
           ),
-          const SizedBox(height: 13),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: formattedDays
-                .map(
-                  (day) => Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.075),
-                      borderRadius: BorderRadius.circular(11),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
                     child: Text(
-                      day,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.72),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                      routine.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '${routine.durationMinutes} min',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.55),
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButton(
-                onPressed: onEdit,
-                tooltip: 'Edit',
-                icon: Icon(
-                  Icons.edit_outlined,
-                  color: Colors.white.withValues(alpha: 0.82),
-                ),
+                  Switch(
+                    value: routine.isEnabled,
+                    onChanged: (_) => onToggle(),
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: Colors.white24,
+                    inactiveThumbColor: Colors.white54,
+                    inactiveTrackColor: Colors.white12,
+                  ),
+                ],
               ),
-              IconButton(
-                onPressed: onDelete,
-                tooltip: 'Delete',
-                icon: Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.white.withValues(alpha: 0.82),
-                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.schedule_rounded,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.72),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    formattedTime,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.82),
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Icon(
+                    Icons.category_outlined,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.72),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      formattedActivity,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 13),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: formattedDays
+                    .map(
+                      (day) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.075),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                        ),
+                        child: Text(
+                          day,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.72),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    onPressed: onEdit,
+                    tooltip: 'Edit',
+                    icon: Icon(
+                      Icons.edit_outlined,
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete',
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.white.withValues(alpha: 0.82),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
