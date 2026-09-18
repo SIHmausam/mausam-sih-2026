@@ -23,9 +23,7 @@ class FakeRedis:
 
 
 async def main():
-    question = (
-    "Can I go out for drive right now?"
-    )
+    question = "Can I go outside right now to long drive?"
 
     weather_context = WeatherContextResponse(
         latitude=28.6139,
@@ -44,10 +42,10 @@ async def main():
             "uv_index": 7.0,
         },
         air_quality={
-    "latitude": 28.6139,
-    "longitude": 77.2090,
-    "us_aqi": 118.0,
-},
+            "latitude": 28.6139,
+            "longitude": 77.2090,
+            "us_aqi": 118.0,
+        },
         hourly=[],
         daily=[],
     )
