@@ -115,10 +115,20 @@ class _ChatbotScreenState extends State<ChatbotScreen>
     });
   }
 
-
   @override
   Widget build(BuildContext context) {
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
+
+    if (keyboardHeight > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _scrollToBottom();
+        }
+      });
+    }
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFF081522),
       body: Stack(
         children: [

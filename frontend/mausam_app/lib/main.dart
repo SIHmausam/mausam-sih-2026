@@ -57,6 +57,29 @@ class MausamApp extends StatelessWidget {
   }
 }
 
+String _personaDisplayName(String value) {
+  switch (value) {
+    case 'fitness':
+      return 'Fitness Enthusiast';
+    case 'farmer':
+      return 'Farmer';
+    case 'traveller':
+      return 'Traveler';
+    case 'health':
+      return 'Health Conscious';
+    case 'surfer':
+      return 'Surfer';
+    case 'parents_families':
+      return 'Parents & Families';
+    case 'commuter':
+      return 'Commuter';
+    case 'event_planner':
+      return 'Event Planner';
+    default:
+      return 'Fitness Enthusiast';
+  }
+}
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -143,12 +166,7 @@ class _SplashScreenState extends State<SplashScreen>
         final preferences = await _preferencesApiService.getPreferences();
 
         if (preferences.onboardingCompleted && preferences.persona != null) {
-          final persona = switch (preferences.persona) {
-            'farmer' => 'Farmer',
-            'traveller' => 'Traveler',
-            'health' => 'Fitness Enthusiast',
-            _ => 'Fitness Enthusiast',
-          };
+          final persona = _personaDisplayName(preferences.persona!);
 
           destination = MainShell(persona: persona);
         }
@@ -3588,12 +3606,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final preferences = await _preferencesApiService.getPreferences();
 
       if (preferences.onboardingCompleted && preferences.persona != null) {
-        final persona = switch (preferences.persona) {
-          'farmer' => 'Farmer',
-          'traveller' => 'Traveler',
-          'health' => 'Fitness Enthusiast',
-          _ => 'Fitness Enthusiast',
-        };
+        final persona = _personaDisplayName(preferences.persona!);
 
         return MainShell(persona: persona);
       }
@@ -3753,7 +3766,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     icon: const Icon(
-                      Icons.arrow_upward_rounded,
+                      Icons.arrow_back_ios_new_rounded,
                       color: Colors.white,
                       size: 25,
                     ),
@@ -4738,7 +4751,11 @@ class _MainShellState extends State<MainShell> {
       temperatureUnit: _temperatureUnit,
       windSpeedUnit: _windSpeedUnit,
     ),
-    ProfilePage(persona: _activePersona, onPersonaChanged: _updatePersona),
+    ProfilePage(
+      persona: _activePersona,
+      onPersonaChanged: _updatePersona,
+      onMenuTap: _openMenu,
+    ),
   ];
 
   @override
@@ -4788,168 +4805,131 @@ class _SideMenu extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final drawerWidth = size.width * 0.80;
 
-    return Material(
-      color: Colors.transparent,
-      child: SafeArea(
-        right: false,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            width: drawerWidth,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFF101C2C).withValues(alpha: 0.97),
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(32),
-                bottomRight: Radius.circular(32),
-              ),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.28),
-                  blurRadius: 30,
-                  offset: const Offset(12, 0),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SizedBox(
+        width: drawerWidth,
+        height: double.infinity,
+        child: Material(
+          color: Colors.transparent,
+          child: SafeArea(
+            right: false,
+            child: Container(
+              width: drawerWidth,
+              height: double.infinity,
+              decoration: BoxDecoration(
+                color: const Color(0xFF101C2C).withValues(alpha: 0.97),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(32),
+                  bottomRight: Radius.circular(32),
                 ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 22, 18, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.10),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 30,
+                    offset: const Offset(12, 0),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 22, 18, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        const SizedBox(width: 4),
+                        const Expanded(
+                          child: Text(
+                            'MAUSAM',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 21,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.3,
+                            ),
                           ),
                         ),
-                        child: const Icon(
-                          Icons.cloud_rounded,
-                          color: Colors.white,
-                          size: 25,
-                        ),
-                      ),
-                      const SizedBox(width: 13),
-                      const Expanded(
-                        child: Text(
-                          'MAUSAM',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 21,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.3,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.07),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.close_rounded,
-                            color: Colors.white.withValues(alpha: 0.78),
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  Text(
-                    'Your weather, your way.',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      fontSize: 13,
-                    ),
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  Text(
-                    'NAVIGATION',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.38),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.3,
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  _SideMenuItem(
-                    icon: Icons.home_rounded,
-                    title: 'Home',
-                    selected: currentIndex == 0,
-                    onTap: () => onSelect(0),
-                  ),
-
-                  _SideMenuItem(
-                    icon: Icons.calendar_today_rounded,
-                    title: 'Smart Routine',
-                    selected: currentIndex == 1,
-                    onTap: () => onSelect(1),
-                  ),
-
-                  _SideMenuItem(
-                    icon: Icons.map_outlined,
-                    title: 'Map',
-                    selected: currentIndex == 2,
-                    onTap: () => onSelect(2),
-                  ),
-
-                  _SideMenuItem(
-                    icon: Icons.person_outline_rounded,
-                    title: 'Profile',
-                    selected: currentIndex == 3,
-                    onTap: () => onSelect(3),
-                  ),
-
-                  const Spacer(),
-
-                  // Account card
-                  GestureDetector(
-                    onTap: () => onSelect(3),
-                    behavior: HitTestBehavior.opaque,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(15),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.065),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.09),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            width: 42,
+                            height: 42,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.09),
+                              color: Colors.white.withValues(alpha: 0.07),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.person_rounded,
-                              color: Colors.white,
-                              size: 20,
+                            child: Icon(
+                              Icons.close_rounded,
+                              color: Colors.white.withValues(alpha: 0.78),
+                              size: 22,
                             ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Text(
+                      'Your weather, your way.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        fontSize: 13,
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    _SideMenuItem(
+                      icon: Icons.home_rounded,
+                      title: 'Home',
+                      selected: currentIndex == 0,
+                      onTap: () => onSelect(0),
+                    ),
+
+                    _SideMenuItem(
+                      icon: Icons.calendar_today_rounded,
+                      title: 'Smart Routine',
+                      selected: currentIndex == 1,
+                      onTap: () => onSelect(1),
+                    ),
+
+                    _SideMenuItem(
+                      icon: Icons.map_outlined,
+                      title: 'Map',
+                      selected: currentIndex == 2,
+                      onTap: () => onSelect(2),
+                    ),
+
+                    _SideMenuItem(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Profile',
+                      selected: currentIndex == 3,
+                      onTap: () => onSelect(3),
+                    ),
+
+                    _SideMenuItem(
+                      icon: Icons.settings_outlined,
+                      title: 'Settings',
+                      selected: false,
+                      onTap: onSettings,
+                    ),
+
+                    const Spacer(),
+
+                    // Persona info
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Colors.white.withValues(alpha: 0.72),
+                            size: 20,
                           ),
                           const SizedBox(width: 11),
                           const Expanded(
@@ -4957,7 +4937,7 @@ class _SideMenu extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Mausam User',
+                                  'Personalized for you',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
@@ -4966,95 +4946,23 @@ class _SideMenu extends StatelessWidget {
                                 ),
                                 SizedBox(height: 3),
                                 Text(
-                                  'Sign in to view account',
-                                  maxLines: 1,
+                                  'Weather insights adapt to your profile',
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: Colors.white54,
                                     fontSize: 11,
+                                    height: 1.3,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: Colors.white38,
-                            size: 20,
-                          ),
                         ],
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Persona card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.065),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.09),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.09),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.auto_awesome_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 11),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Personalized for you',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              SizedBox(height: 3),
-                              Text(
-                                'Weather insights adapt to your profile',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 11,
-                                  height: 1.3,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  _SideMenuItem(
-                    icon: Icons.settings_outlined,
-                    title: 'Settings',
-                    selected: false,
-                    onTap: onSettings,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -5120,15 +5028,6 @@ class _SideMenuItem extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                if (selected)
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
               ],
             ),
           ),
@@ -7871,11 +7770,13 @@ class _FunctionalNavItem extends StatelessWidget {
 class ProfilePage extends StatefulWidget {
   final String persona;
   final ValueChanged<String> onPersonaChanged;
+  final VoidCallback? onMenuTap;
 
   const ProfilePage({
     super.key,
     required this.persona,
     required this.onPersonaChanged,
+    this.onMenuTap,
   });
 
   @override
@@ -8370,14 +8271,14 @@ class _ProfilePageState extends State<ProfilePage> {
         const _OnboardingBackground(),
         SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 30, 20, 120),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 150),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _PageHeader(
+                _PageHeader(
+                  onMenuTap: widget.onMenuTap,
                   title: 'Profile',
                   subtitle: 'Your Mausam personalization profile',
-                  icon: Icons.person_outline_rounded,
                 ),
                 const SizedBox(height: 28),
 
@@ -8564,52 +8465,85 @@ class _PageBackground extends StatelessWidget {
 }
 
 class _PageHeader extends StatelessWidget {
+  final VoidCallback? onMenuTap;
   final String title;
   final String subtitle;
-  final IconData icon;
 
   const _PageHeader({
+    required this.onMenuTap,
     required this.title,
     required this.subtitle,
-    required this.icon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+    return SizedBox(
+      height: 58,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: _ProfileMenuButton(onTap: onMenuTap ?? () {}),
           ),
-          child: Icon(icon, color: Colors.white, size: 25),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 25,
-                  fontWeight: FontWeight.w600,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.62),
+                    fontSize: 12.5,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileMenuButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ProfileMenuButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.24),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+            ),
+            child: const Icon(Icons.menu, color: Colors.white, size: 27),
           ),
         ),
-      ],
+      ),
     );
   }
 }
