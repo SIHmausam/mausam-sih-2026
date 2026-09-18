@@ -13,50 +13,95 @@ class ChatbotService:
     COUNTER_TTL_SECONDS = 24 * 60 * 60
 
     WEATHER_KEYWORDS: ClassVar[set[str]] = {
+        # Core weather
         "weather",
         "temperature",
+        "temp",
         "rain",
         "rainfall",
+        "drizzle",
+        "shower",
+        "showers",
         "forecast",
         "humidity",
+        "humid",
         "wind",
+        "windy",
         "aqi",
         "air quality",
+        "air pollution",
+        "pollution",
         "uv",
+        "uv index",
+        "sun",
+        "sunny",
         "sunrise",
         "sunset",
         "cloud",
+        "clouds",
         "cloudy",
+        "overcast",
         "precipitation",
         "storm",
         "thunder",
+        "thunderstorm",
         "visibility",
+        "fog",
         "dew point",
         "heat",
+        "heatwave",
         "cold",
         "climate",
+        # Air quality
+        "pm2.5",
+        "pm 2.5",
+        "pm25",
+        "pm10",
+        "pm 10",
+        "particulate matter",
+        "particulates",
+        "smog",
+        # Weather-related planning
+        "umbrella",
+        "raincoat",
+        "rain coat",
+        "jacket",
+        "coat",
+        "sunblock",
+        "sunscreen",
+        "sunglasses",
+        # Marine
         "tide",
         "wave",
         "waves",
         "sea",
+        "ocean",
+        "surf",
+        "surfing",
+        "beach",
+        # Agriculture
         "soil moisture",
         "farming",
         "farm",
         "garden",
+        "gardening",
+        "crop",
+        "crops",
+        "agriculture",
+        # Activities affected by weather
         "commute",
+        "commuting",
         "travel",
+        "travelling",
+        "traveling",
         "running",
-        "run",
-        "jog",
         "jogging",
+        "jog",
         "exercise",
         "workout",
         "walking",
-        "walk",
         "cycling",
         "cycle",
-        "surf",
-        "surfing",
         "school",
         "children",
         "child",
@@ -66,8 +111,6 @@ class ChatbotService:
         "outdoor event",
         "picnic",
         "outdoor",
-        "weather card",
-        "mausam",
     }
 
     APP_KEYWORDS: ClassVar[set[str]] = {
@@ -82,9 +125,7 @@ class ChatbotService:
         "mausam assistant",
     }
 
-    CONTEXT_KEYWORDS: ClassVar[
-        dict[str, set[str]]
-    ] = {
+    CONTEXT_KEYWORDS: ClassVar[dict[str, set[str]]] = {
         "running_conditions": {
             "run",
             "running",
@@ -168,11 +209,11 @@ class ChatbotService:
     }
 
     def __init__(
-    self,
-    *,
-    redis: Redis,
-    llm_client: LLMProvider,
-) -> None:
+        self,
+        *,
+        redis: Redis,
+        llm_client: LLMProvider,
+    ) -> None:
         self.redis = redis
         self.llm_client = llm_client
 
@@ -191,14 +232,19 @@ class ChatbotService:
             raise ValueError("Question cannot be empty")
 
         if not self._is_mausam_related(question):
-            return (
-                (
-                    "Please ask a question related to Mausam, weather, "
-                "or the Mausam app."
-                ),
-                0,
-                self.MAX_QUESTIONS,
-            )
+            is_related = await self._llm_is_mausam_related(question)
+
+            if not is_related:
+                return (
+                    (
+                        "That's outside my area of expertise 😊. I'm here to help "
+                        "with Mausam, weather, air quality, forecasts, outdoor "
+                        "activities, and Mausam app features. What would you like "
+                        "to know?"
+                    ),
+                    0,
+                    self.MAX_QUESTIONS,
+                )
 
         # -----------------------------------------------------
         # Identify the most relevant weather/activity context.
@@ -223,7 +269,7 @@ class ChatbotService:
             return (
                 (
                     "You have reached the 20-question limit for this "
-                "chatbot session. Please start a new session."
+                    "chatbot session. Please start a new session."
                 ),
                 self.MAX_QUESTIONS,
                 0,
@@ -239,31 +285,26 @@ class ChatbotService:
             result = await self.llm_client.generate_json(
                 prompt=prompt,
                 response_schema={
-                   "type": "object",
-                   "properties": {
-                       "answer": {
-                          "type": "string",
+                    "type": "object",
+                    "properties": {
+                        "answer": {
+                            "type": "string",
                         }
                     },
                     "required": ["answer"],
                     "additionalProperties": False,
-                }
+                },
             )
 
             answer = result.get("answer")
 
             if not isinstance(answer, str) or not answer.strip():
-                raise ValueError(
-                    "LLM returned an empty chatbot answer"
-                )
+                raise ValueError("LLM returned an empty chatbot answer")
 
             answer = answer.strip()
 
-        except Exception as exc:   # noqa: BLE001
-            print(
-                f"\n[CHATBOT LLM ERROR] "
-                f"{type(exc).__name__}: {exc}\n"
-            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"\n[CHATBOT LLM ERROR] {type(exc).__name__}: {exc}\n")
             answer = self._deterministic_fallback(
                 question=question,
                 weather_context=weather_context,
@@ -278,25 +319,117 @@ class ChatbotService:
 
     @classmethod
     def _is_mausam_related(cls, question: str) -> bool:
-        normalized = question.lower()
+        normalized = " ".join(question.lower().split())
 
-        # Direct keyword matching.
+        # 1. Explicit weather/app keywords.
+        if any(keyword in normalized for keyword in cls.WEATHER_KEYWORDS):
+            return True
+
+        # 2. Activity/context keywords.
         if any(
             keyword in normalized
-            for keyword in cls.WEATHER_KEYWORDS
+            for keywords in cls.CONTEXT_KEYWORDS.values()
+            for keyword in keywords
         ):
             return True
 
-        # Context keywords are also considered Mausam-related.
-        for keywords in cls.CONTEXT_KEYWORDS.values():
-            if any(keyword in normalized for keyword in keywords):
-                return True
+        # 3. Mausam application keywords.
+        return any(keyword in normalized for keyword in cls.APP_KEYWORDS)
 
-        # Application-specific questions.
-        return any(
-            keyword in normalized
-            for keyword in cls.APP_KEYWORDS
-        )
+    async def _llm_is_mausam_related(
+        self,
+        question: str,
+    ) -> bool:
+        """
+        Use the LLM only for questions that are not recognized
+        by the fast keyword/context checks.
+        """
+
+        prompt = f"""
+You are a strict relevance classifier for the Mausam weather application.
+
+Determine whether the user's question is meaningfully related to:
+
+- weather
+- current or forecast weather conditions
+- temperature
+- rain or precipitation
+- wind
+- humidity
+- air quality
+- AQI
+- PM2.5 or PM10
+- UV or sunlight
+- visibility
+- clouds, storms, fog, heat, or cold
+- outdoor activities affected by weather
+- travel or commuting when weather is relevant
+- farming or gardening when weather is relevant
+- marine or surfing conditions
+- the Mausam application, its features, cards, alerts, personalization,
+  notifications, or weather assistant
+
+The user may express the question indirectly or with completely different
+wording.
+
+Examples that SHOULD be classified as related:
+
+"Can I go outside right now?"
+"Would it be okay to step out?"
+"Should I change my outdoor plans?"
+"Will I need something for the rain?"
+"Is now a good time to leave?"
+"Would it be better to go later?"
+"Why does the air feel polluted?"
+"What is PM2.5?"
+"Should I postpone my picnic?"
+"Can I take my kids outside?"
+"Is today suitable for my trip?"
+
+Examples that SHOULD NOT be classified as related:
+
+"Write Python code."
+"Tell me a joke."
+"Who is the president?"
+"Help me solve this mathematics problem."
+"Recommend a laptop."
+"Write my resume."
+
+Important:
+- Classify based on meaning, not exact keywords.
+- Do not answer the question.
+- Do not use current weather data.
+- Return only the requested JSON.
+
+User question:
+{question}
+""".strip()
+
+        try:
+            result = await self.llm_client.generate_json(
+                prompt=prompt,
+                response_schema={
+                    "type": "object",
+                    "properties": {
+                        "is_mausam_related": {
+                            "type": "boolean",
+                        },
+                    },
+                    "required": ["is_mausam_related"],
+                    "additionalProperties": False,
+                },
+            )
+
+            value = result.get("is_mausam_related")
+
+            if isinstance(value, bool):
+                return value
+
+        except Exception as exc:  # noqa: BLE001
+            print(f"\n[CHATBOT RELEVANCE ERROR] {type(exc).__name__}: {exc}\n")
+
+        # Fail closed if semantic classification fails.
+        return False
 
     @classmethod
     def _detect_context(cls, question: str) -> str:
@@ -304,10 +437,7 @@ class ChatbotService:
 
         # Check specific activity contexts first.
         for context, keywords in cls.CONTEXT_KEYWORDS.items():
-            if any(
-                keyword in normalized
-                for keyword in keywords
-            ):
+            if any(keyword in normalized for keyword in keywords):
                 return context
 
         # Otherwise classify as general weather.
@@ -318,10 +448,7 @@ class ChatbotService:
         cls,
         question: str,
     ) -> bool:
-        return (
-            cls._detect_context(question)
-            == "surf_conditions"
-        )
+        return cls._detect_context(question) == "surf_conditions"
 
     @classmethod
     def _build_prompt(
@@ -332,15 +459,14 @@ class ChatbotService:
         context: str,
     ) -> str:
 
-        weather_data = cls._weather_context_to_dict(
-            weather_context
-        )
+        weather_data = cls._weather_context_to_dict(weather_context)
 
         context_instructions = {
             "general_weather": (
-                "Answer as a general Mausam/weather assistant. "
-                "Use the supplied weather data when the question "
-                "asks about current conditions."
+                "Answer as a Mausam/weather assistant. "
+                "For current weather questions, use only the supplied verified "
+                "Mausam data. For general weather concepts, explain established "
+                "weather knowledge without inventing current measurements."
             ),
             "running_conditions": (
                 "The user is asking about running or outdoor exercise. "
@@ -425,8 +551,20 @@ Verified Mausam weather data:
 Rules:
 
 1. Answer only the user's Mausam/weather/app question.
-2. Use only information present in the supplied weather data.
-3. Never invent weather values.
+
+2. For CURRENT weather questions, use only verified information
+   present in the supplied Mausam weather data.
+
+3. For GENERAL weather-concept questions, you may explain established
+   general weather knowledge without requiring current Mausam data.
+
+4. Never invent current weather values.
+
+5. Never claim that a current measurement exists unless it is present
+   in the supplied Mausam data.
+
+6. If the user asks for a current value that Mausam does not supply,
+   clearly say that the requested current measurement is unavailable.
 4. Never claim to have access to information that was not supplied.
 5. Do not calculate new weather measurements.
 6. Do not change ML personalization, card ranking, or eligibility.
@@ -449,6 +587,33 @@ threshold is supplied.
 13. Do not recommend specific safety equipment or techniques unless that
 information is explicitly part of the supplied Mausam data.
 14. Give a clear, conversational answer in approximately 3–5 sentences.
+15. Use 1–3 relevant emojis when they naturally improve readability and
+    engagement.
+
+16. Choose emojis according to the subject of the user's question:
+    - temperature → 🌡️ ☀️
+    - rain or precipitation → 🌧️ ☔ 🌦️
+    - clouds → ☁️ 🌥️
+    - wind → 💨 🌬️
+    - humidity → 💧
+    - air quality or PM2.5 → 🌫️ 🍃
+    - UV or sunlight → ☀️ 🕶️
+    - visibility → 👀 🌫️
+    - walking or running → 🚶 🏃
+    - driving or commuting → 🚗 🛣️
+    - travel → 🧳 ✈️
+    - gardening or farming → 🌱 🌿
+    - marine or surfing → 🌊 🏄
+
+17. Do not use emojis excessively or place an emoji after every sentence.
+
+18. Emojis must not imply a weather condition that is not supported by the
+    supplied Mausam data. For example, do not use 🌧️ merely because the
+    user mentions rain or an umbrella if the supplied data does not establish
+    precipitation.
+
+19. Use emojis to improve presentation, not to replace factual information
+    or make unsupported recommendations.
 
 For weather questions where sufficient verified information is available,
 do not answer with only a list of measurements. Explain the answer first,
@@ -532,54 +697,36 @@ Return exactly:
             current_data = result["current"]
 
             if current.temperature is not None:
-                current_data["temperature_c"] = (
-                    current.temperature
-                )
+                current_data["temperature_c"] = current.temperature
 
             if current.apparent_temperature is not None:
-                current_data[
-                    "apparent_temperature_c"
-                ] = current.apparent_temperature
+                current_data["apparent_temperature_c"] = current.apparent_temperature
 
             if current.humidity is not None:
-                current_data["humidity_percent"] = (
-                    current.humidity
-                )
+                current_data["humidity_percent"] = current.humidity
 
             if current.precipitation is not None:
-                current_data["precipitation_mm"] = (
-                    current.precipitation
-                )
+                current_data["precipitation_mm"] = current.precipitation
 
             if current.rain is not None:
-                current_data["rain_mm"] = (
-                    current.rain
-                )
+                current_data["rain_mm"] = current.rain
 
             if current.rain_probability is not None:
-                current_data[
-                    "precipitation_probability_percent"
-                ] = current.rain_probability
+                current_data["precipitation_probability_percent"] = (
+                    current.rain_probability
+                )
 
             if current.weather_code is not None:
-                current_data["weather_code"] = (
-                    current.weather_code
-                )
+                current_data["weather_code"] = current.weather_code
 
             if current.wind_speed is not None:
-                current_data["wind_speed_kmh"] = (
-                    current.wind_speed
-                )
+                current_data["wind_speed_kmh"] = current.wind_speed
 
             if current.visibility is not None:
-                current_data["visibility_m"] = (
-                    current.visibility
-                )
+                current_data["visibility_m"] = current.visibility
 
             if current.is_daylight is not None:
-                current_data["is_daylight"] = (
-                    current.is_daylight
-                )
+                current_data["is_daylight"] = current.is_daylight
 
             current_uv_index = getattr(
                 current,
@@ -588,9 +735,7 @@ Return exactly:
             )
 
             if current_uv_index is not None:
-                current_data["uv_index"] = (
-                    current_uv_index
-                )
+                current_data["uv_index"] = current_uv_index
 
         air_quality = getattr(
             weather_context,
@@ -616,9 +761,7 @@ Return exactly:
                     air_quality_data[field] = value
 
             if air_quality_data:
-                result["air_quality"] = (
-                    air_quality_data
-                )
+                result["air_quality"] = air_quality_data
 
         marine = getattr(
             weather_context,
@@ -626,51 +769,36 @@ Return exactly:
             None,
         )
 
-        if (
-            marine is not None
-            and marine.available
-        ):
+        if marine is not None and marine.available:
             marine_data: dict[str, Any] = {}
 
             if marine.wave_height is not None:
-                marine_data["wave_height_m"] = (
-                    marine.wave_height
-                )
+                marine_data["wave_height_m"] = marine.wave_height
 
             if marine.wave_direction is not None:
-                marine_data[
-                    "wave_direction_degrees"
-                ] = marine.wave_direction
+                marine_data["wave_direction_degrees"] = marine.wave_direction
 
             if marine.wave_period is not None:
-                marine_data[
-                    "wave_period_seconds"
-                ] = marine.wave_period
+                marine_data["wave_period_seconds"] = marine.wave_period
 
             if marine.swell_wave_height is not None:
-                marine_data[
-                    "swell_wave_height_m"
-                ] = marine.swell_wave_height
+                marine_data["swell_wave_height_m"] = marine.swell_wave_height
 
             if marine.swell_wave_direction is not None:
-                marine_data[
-                    "swell_wave_direction_degrees"
-                ] = marine.swell_wave_direction
+                marine_data["swell_wave_direction_degrees"] = (
+                    marine.swell_wave_direction
+                )
 
             if marine.swell_wave_period is not None:
-                marine_data[
-                    "swell_wave_period_seconds"
-                ] = marine.swell_wave_period
+                marine_data["swell_wave_period_seconds"] = marine.swell_wave_period
 
             if marine.sea_level_height_msl is not None:
-                marine_data[
-                    "sea_level_height_msl_m"
-                ] = marine.sea_level_height_msl
+                marine_data["sea_level_height_msl_m"] = marine.sea_level_height_msl
 
             if marine.sea_surface_temperature is not None:
-                marine_data[
-                    "sea_surface_temperature_c"
-                ] = marine.sea_surface_temperature
+                marine_data["sea_surface_temperature_c"] = (
+                    marine.sea_surface_temperature
+                )
 
             if marine_data:
                 result["marine"] = marine_data
@@ -686,10 +814,7 @@ Return exactly:
         context: str,
     ) -> str:
 
-        if (
-            weather_context is None
-            or not weather_context.available
-        ):
+        if weather_context is None or not weather_context.available:
             return (
                 "Current Mausam weather data is not available right now. "
                 "Please try again shortly."
@@ -699,126 +824,100 @@ Return exactly:
         current = weather_context.current
 
         if context == "running_conditions":
-
             parts = []
 
             if current.temperature is not None:
-                parts.append(
-                    f"the temperature is {current.temperature}°C"
-                )
+                parts.append(f"the temperature is {current.temperature}°C")
+
+            if current.humidity is not None:
+                parts.append(f"humidity is {current.humidity}%")
 
             if current.wind_speed is not None:
-                parts.append(
-                    f"wind speed is {current.wind_speed}"
-                )
+                parts.append(f"wind speed is {current.wind_speed} km/h")
 
             if current.rain_probability is not None:
                 parts.append(
-                    f"rain probability is "
-                    f"{current.rain_probability}%"
+                    f"the precipitation probability is {current.rain_probability}%"
                 )
 
             if parts:
                 return (
-                    "Based on the available Mausam conditions, "
-                    + ", ".join(parts)
-                    + ". Consider these conditions before running."
+                    "🏃 Based on the available Mausam data, "
+                    + ", and ".join(parts)
+                    + ". These are the verified weather factors "
+                    "available for your outdoor activity."
                 )
 
-            return (
-                "Running-related weather information is "
-                "not available right now."
-            )
+            return "Running-related weather information is not available right now."
 
         if context == "travel_conditions":
-
             parts = []
 
             if current.temperature is not None:
-                parts.append(
-                    f"temperature is {current.temperature}°C"
-                )
-
-            if current.wind_speed is not None:
-                parts.append(
-                    f"wind speed is {current.wind_speed}"
-                )
+                parts.append(f"the temperature is {current.temperature}°C")
 
             if current.visibility is not None:
-                parts.append(
-                    f"visibility is {current.visibility}"
-                )
+                parts.append(f"visibility is {current.visibility / 1000:.1f} km")
+
+            if current.wind_speed is not None:
+                parts.append(f"wind speed is {current.wind_speed} km/h")
 
             if current.rain_probability is not None:
                 parts.append(
-                    f"rain probability is "
-                    f"{current.rain_probability}%"
+                    f"the precipitation probability is {current.rain_probability}%"
                 )
 
             if parts:
                 return (
-                    "Based on the available Mausam data, "
+                    "🧳 Based on the available Mausam data, "
                     + ", ".join(parts)
-                    + "."
+                    + ". These are the verified weather factors "
+                    "available for your travel question."
                 )
 
-            return (
-                "Travel-related weather information is "
-                "not available right now."
-            )
+            return "Travel-related weather information is not available right now."
 
         if context == "commute_conditions":
-
             parts = []
 
             if current.visibility is not None:
-                parts.append(
-                    f"visibility is {current.visibility}"
-                )
+                parts.append(f"visibility is {current.visibility / 1000:.1f} km")
 
             if current.wind_speed is not None:
-                parts.append(
-                    f"wind speed is {current.wind_speed}"
-                )
+                parts.append(f"wind speed is {current.wind_speed} km/h")
 
             if current.rain_probability is not None:
                 parts.append(
-                    f"rain probability is "
-                    f"{current.rain_probability}%"
+                    f"the precipitation probability is {current.rain_probability}%"
                 )
 
             if parts:
                 return (
-                    "Based on the available Mausam data, "
+                    "🚗 Based on the available Mausam data, "
                     + ", ".join(parts)
-                    + "."
+                    + ". These are the verified weather factors "
+                    "available for your driving or commute question."
                 )
 
-            return (
-                "Commute-related weather information is "
-                "not available right now."
-            )
+            return "Commute-related weather information is not available right now."
 
         if context == "family_school":
-
             parts = []
+
+            if current.temperature is not None:
+                parts.append(f"the temperature is {current.temperature}°C")
 
             if current.rain_probability is not None:
                 parts.append(
-                    f"rain probability is "
-                    f"{current.rain_probability}%"
-                )
-
-            if current.temperature is not None:
-                parts.append(
-                    f"temperature is {current.temperature}°C"
+                    f"the precipitation probability is {current.rain_probability}%"
                 )
 
             if parts:
                 return (
-                    "Based on the available Mausam conditions, "
+                    "👨‍👩‍👧 Based on the available Mausam data, "
                     + ", ".join(parts)
-                    + "."
+                    + ". These are the current weather factors "
+                    "available for your question."
                 )
 
             return (
@@ -826,140 +925,160 @@ Return exactly:
                 "is not available right now."
             )
 
-        if context == "event_conditions":
-
+        if context == "farm_garden":
             parts = []
 
             if current.temperature is not None:
-                parts.append(
-                    f"temperature is {current.temperature}°C"
-                )
+                parts.append(f"the temperature is {current.temperature}°C")
 
             if current.humidity is not None:
-                parts.append(
-                    f"humidity is {current.humidity}%"
-                )
+                parts.append(f"humidity is {current.humidity}%")
 
             if current.rain_probability is not None:
                 parts.append(
-                    f"rain probability is "
-                    f"{current.rain_probability}%"
+                    f"the precipitation probability is {current.rain_probability}%"
                 )
 
             if parts:
                 return (
-                    "Based on the available Mausam conditions, "
+                    "🌱 Based on the available Mausam data, "
                     + ", ".join(parts)
-                    + "."
+                    + ". These are the verified weather factors "
+                    "available for your farming or gardening question."
                 )
 
             return (
-                "Event-related weather information is "
-                "not available right now."
+                "Farming and gardening weather information is not available right now."
             )
 
-        if "temperature" in normalized:
-            if current.temperature is not None:
+        if context == "surf_conditions":
+            marine = getattr(weather_context, "marine", None)
+            parts = []
+
+            if marine is not None and marine.available:
+                if marine.wave_height is not None:
+                    parts.append(f"wave height is {marine.wave_height} m")
+
+                if marine.wave_period is not None:
+                    parts.append(f"wave period is {marine.wave_period} seconds")
+
+                if marine.sea_surface_temperature is not None:
+                    parts.append(
+                        f"sea-surface temperature is {marine.sea_surface_temperature}°C"
+                    )
+
+            if current.wind_speed is not None:
+                parts.append(f"wind speed is {current.wind_speed} km/h")
+
+            if parts:
                 return (
-                    f"The current temperature is "
-                    f"{current.temperature}°C."
+                    "🌊 Based on the available Mausam data, "
+                    + ", ".join(parts)
+                    + ". These are the verified marine and weather "
+                    "conditions available for your question."
                 )
+
+            return "Marine-related weather information is not available right now."
+
+        if context == "event_conditions":
+            parts = []
+
+            if current.temperature is not None:
+                parts.append(f"the temperature is {current.temperature}°C")
+
+            if current.humidity is not None:
+                parts.append(f"humidity is {current.humidity}%")
+
+            if current.rain_probability is not None:
+                parts.append(
+                    f"the precipitation probability is {current.rain_probability}%"
+                )
+
+            if parts:
+                return (
+                    "🎉 Based on the available Mausam data, "
+                    + ", ".join(parts)
+                    + ". These are the verified weather factors "
+                    "available for your event question."
+                )
+
+            return "Event-related weather information is not available right now."
+
+        if "temperature" in normalized or "temp" in normalized:
+            if current.temperature is not None:
+                return f"🌡️ The current temperature is {current.temperature}°C."
 
             return "The current temperature is not available."
 
         if "humidity" in normalized:
             if current.humidity is not None:
-                return (
-                    f"The current humidity is "
-                    f"{current.humidity}%."
-                )
+                return f"💧 The current humidity is {current.humidity}%."
 
             return "The current humidity is not available."
 
         if (
             "rain probability" in normalized
             or "chance of rain" in normalized
+            or "probability of rain" in normalized
         ):
             if current.rain_probability is not None:
                 return (
-                    f"The current rain probability is "
+                    f"🌦️ The current precipitation probability is "
                     f"{current.rain_probability}%."
                 )
 
-            return (
-                "The current rain probability is not available."
-            )
+            return "The current precipitation probability is not available."
 
-        if "rain" in normalized or "rainfall" in normalized:
+        if (
+            "rain" in normalized
+            or "rainfall" in normalized
+            or "precipitation" in normalized
+        ):
             if current.rain is not None:
-                return f"Current rain is {current.rain}."
+                return f"🌧️ The current rain measurement is {current.rain} mm."
 
             if current.precipitation is not None:
                 return (
-                    f"Current precipitation is "
-                    f"{current.precipitation}."
+                    f"🌧️ The current precipitation measurement is "
+                    f"{current.precipitation} mm."
                 )
 
-            return (
-                "Current rain information is not available."
-            )
+            return "Current precipitation information is not available."
 
         if "wind" in normalized:
             if current.wind_speed is not None:
-                return (
-                    f"The current wind speed is "
-                    f"{current.wind_speed}."
-                )
+                return f"💨 The current wind speed is {current.wind_speed} km/h."
 
             return "The current wind speed is not available."
 
         if "visibility" in normalized:
             if current.visibility is not None:
-                return (
-                    f"Current visibility is "
-                    f"{current.visibility}."
-                )
+                return f"👀 Current visibility is {current.visibility / 1000:.1f} km."
 
-            return (
-                "Current visibility information is not available."
-            )
+            return "Current visibility information is not available."
 
         if (
             "aqi" in normalized
             or "air quality" in normalized
+            or "air pollution" in normalized
+            or "pollution" in normalized
         ):
             air_quality = weather_context.air_quality
 
             if air_quality is not None:
-
                 if air_quality.aqi is not None:
-                    return (
-                        f"The current AQI is "
-                        f"{air_quality.aqi}."
-                    )
+                    return f"🌫️ The current AQI is {air_quality.aqi}."
 
                 if air_quality.us_aqi is not None:
-                    return (
-                        f"The current US AQI is "
-                        f"{air_quality.us_aqi}."
-                    )
+                    return f"🌫️ The current AQI is {air_quality.us_aqi}."
 
-            return (
-                "Current air-quality information "
-                "is not available."
-            )
+            return "Current air-quality information is not available."
 
         if "uv" in normalized:
             air_quality = weather_context.air_quality
 
-            if (
-                air_quality is not None
-                and air_quality.uv_index is not None
-            ):
-                return (
-                    f"The current UV index is "
-                    f"{air_quality.uv_index}."
-                )
+            if air_quality is not None and air_quality.uv_index is not None:
+                return f"☀️ The current UV index is {air_quality.uv_index}."
 
             uv_index = getattr(
                 current,
@@ -968,19 +1087,14 @@ Return exactly:
             )
 
             if uv_index is not None:
-                return (
-                    f"The current UV index is "
-                    f"{uv_index}."
-                )
+                return f"☀️ The current UV index is {uv_index}."
 
-            return (
-                "The current UV index is not available."
-            )
+            return "The current UV index is not available."
 
         return (
             "The Mausam assistant is temporarily unavailable, "
             "so I can only provide verified current Mausam "
-            "weather values right now."
+            "weather information right now."
         )
 
     @staticmethod
