@@ -807,12 +807,9 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           // ATTRIBUTION
           // ------------------------------------------
           Positioned(
-            left: 0,
-            right: 0,
+            left: 34,
             bottom: 92,
-            child: IgnorePointer(
-              child: Center(child: _buildAttribution(config)),
-            ),
+            child: IgnorePointer(child: _buildAttribution(config)),
           ),
         ],
       ),
@@ -1353,7 +1350,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         '${config.attribution}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: Colors.white60, fontSize: 9),
+        style: const TextStyle(color: Colors.white54, fontSize: 8),
       ),
     );
   }
