@@ -159,7 +159,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
-    Widget destination = const OnboardingScreen();
+    Widget destination = const LanguageSelectionScreen();
 
     if (isAuthenticated) {
       try {
@@ -349,6 +349,250 @@ class _SplashScreenState extends State<SplashScreen>
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class LanguageSelectionScreen extends StatefulWidget {
+  const LanguageSelectionScreen({super.key});
+
+  @override
+  State<LanguageSelectionScreen> createState() =>
+      _LanguageSelectionScreenState();
+}
+
+class _LanguageSelectionScreenState extends State<LanguageSelectionScreen> {
+  String _selectedLanguage = 'english';
+
+  void _continue() {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const OnboardingScreen(),
+        transitionDuration: const Duration(milliseconds: 500),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOut,
+            ),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const _OnboardingBackground(),
+
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 30, 28, 28),
+              child: Column(
+                children: [
+                  const Spacer(),
+
+                  Container(
+                    width: 108,
+                    height: 108,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.16),
+                          blurRadius: 28,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.language_rounded,
+                      color: Colors.white.withValues(alpha: 0.92),
+                      size: 48,
+                    ),
+                  ),
+
+                  const SizedBox(height: 42),
+
+                  const Text(
+                    'Choose your language',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      height: 1.15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  Text(
+                    'Select your preferred language for Mausam.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.72),
+                      fontSize: 16,
+                      height: 1.55,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+
+                  const SizedBox(height: 38),
+
+                  _LanguageOption(
+                    title: 'English',
+                    subtitle: 'Continue in English',
+                    icon: Icons.language_rounded,
+                    selected: _selectedLanguage == 'english',
+                    onTap: () {
+                      setState(() => _selectedLanguage = 'english');
+                    },
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  _LanguageOption(
+                    title: 'हिन्दी',
+                    subtitle: 'हिन्दी में जारी रखें',
+                    icon: Icons.translate_rounded,
+                    selected: _selectedLanguage == 'hindi',
+                    onTap: () {
+                      setState(() => _selectedLanguage = 'hindi');
+                    },
+                  ),
+
+                  const Spacer(),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _OnboardingNextButton(
+                        label: 'Continue',
+                        onPressed: _continue,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageOption extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LanguageOption({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+          decoration: BoxDecoration(
+            color: selected
+                ? Colors.white.withValues(alpha: 0.13)
+                : Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withValues(alpha: 0.28)
+                  : Colors.white.withValues(alpha: 0.12),
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.10),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: selected ? 0.12 : 0.07),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.white.withValues(alpha: selected ? 0.94 : 0.68),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.60),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: selected ? 1.0 : 0.0,
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -5341,6 +5585,7 @@ class _HomeScreenState extends State<HomeScreen>
           latitude: _selectedLocationData.latitude,
           longitude: _selectedLocationData.longitude,
           city: _selectedLocation,
+          includeMarine: true,
         ).then((weather) {
           if (mounted) {
             setState(() {
@@ -5521,6 +5766,7 @@ class _HomeScreenState extends State<HomeScreen>
         latitude: _selectedLocationData.latitude,
         longitude: _selectedLocationData.longitude,
         city: _selectedLocation,
+        includeMarine: true,
       );
 
       if (!mounted) return;
