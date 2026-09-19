@@ -125,6 +125,33 @@ class ChatbotService:
         "mausam assistant",
     }
 
+    GREETING_PHRASES: ClassVar[set[str]] = {
+        "hi",
+        "hello",
+        "hey",
+        "hi mausam",
+        "hello mausam",
+        "hey mausam",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "how are you",
+        "how are you doing",
+    }
+
+    CAPABILITY_PHRASES: ClassVar[set[str]] = {
+        "how can you help me",
+        "how can you help",
+        "what can you do",
+        "what can you do for me",
+        "what can you help me with",
+        "what do you do",
+        "who are you",
+        "what are your features",
+        "what can i ask you",
+        "how do you help",
+    }
+
     CONTEXT_KEYWORDS: ClassVar[dict[str, set[str]]] = {
         "running_conditions": {
             "run",
@@ -231,6 +258,15 @@ class ChatbotService:
         if not question:
             raise ValueError("Question cannot be empty")
 
+        conversation_response = self._conversation_response(question)
+
+        if conversation_response is not None:
+            return (
+                conversation_response,
+                0,
+                self.MAX_QUESTIONS,
+            )
+
         if not self._is_mausam_related(question):
             is_related = await self._llm_is_mausam_related(question)
 
@@ -245,10 +281,6 @@ class ChatbotService:
                     0,
                     self.MAX_QUESTIONS,
                 )
-
-        # -----------------------------------------------------
-        # Identify the most relevant weather/activity context.
-        # -----------------------------------------------------
 
         context = self._detect_context(question)
 
@@ -316,6 +348,39 @@ class ChatbotService:
             count,
             self.MAX_QUESTIONS - count,
         )
+
+    @classmethod
+    def _conversation_response(
+        cls,
+        question: str,
+    ) -> str | None:
+        normalized = " ".join(question.lower().strip(" \t\n\r?!.,").split())
+
+        if any(
+            normalized == phrase
+            or normalized.startswith(f"{phrase} ")
+            for phrase in cls.GREETING_PHRASES
+        ):
+            return (
+                "Hi! I'm Mausam ☁️ I'm doing well and ready to help. "
+                "You can ask me about weather, rain, air quality, UV, "
+                "outdoor plans, travel, commuting, farming, "
+                "or marine conditions."
+            )
+
+        if any(
+            phrase in normalized
+            for phrase in cls.CAPABILITY_PHRASES
+        ):
+            return (
+                "I can help you with weather and Mausam features ☀️ "
+                "You can ask about temperature, rain chances, AQI, UV, "
+                "wind, humidity, outdoor plans, commuting, travel, farming, "
+                "marine conditions, surf conditions, alerts, and other "
+                "Mausam app features."
+            )
+
+        return None
 
     @classmethod
     def _is_mausam_related(cls, question: str) -> bool:

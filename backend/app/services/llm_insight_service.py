@@ -481,7 +481,7 @@ class LLMInsightService:
                         prompt=prompt,
                         response_schema=response_schema,
                     ),
-                    timeout=5.0,
+                    timeout=8.0,
                 )
                 logger.info(
                     "RAW LLM RESPONSE: %s",
@@ -490,22 +490,11 @@ class LLMInsightService:
 
                 validated = LLMInsightResponse.model_validate(raw_response)
 
-                returned_cards = {
-                    item.card for item in validated.insights if item.insight.strip()
-                }
-
                 requested_card_set = set(requested_cards)
 
-                if returned_cards != requested_card_set:
-                    missing_cards = requested_card_set - returned_cards
-
-                    extra_cards = returned_cards - requested_card_set
-
-                    raise ValueError(
-                        "LLM returned incomplete card insights. "
-                        f"Missing: {sorted(missing_cards)}; "
-                        f"Extra: {sorted(extra_cards)}"
-                    )
+                verified_context_by_card = {
+                    card["card"]: card["verified_data"] for card in controlled_cards
+                }
 
                 grounded_insights: dict[str, str] = {}
 
@@ -513,18 +502,48 @@ class LLMInsightService:
                     card_name = item.card
                     insight = item.insight.strip()
 
+                    if card_name not in requested_card_set:
+                        logger.warning(
+                            "Ignoring unexpected insight card: %s",
+                            card_name,
+                        )
+                        continue
+
                     if not insight:
+                        continue
+
+                    if card_name in grounded_insights:
+                        logger.warning(
+                            "Ignoring duplicate insight card: %s",
+                            card_name,
+                        )
                         continue
 
                     grounded_insights[card_name] = insight
 
-                if set(grounded_insights) != requested_card_set:
-                    missing_cards = requested_card_set - set(grounded_insights)
+                missing_cards = [
+                    card_name
+                    for card_name in requested_cards
+                    if card_name not in grounded_insights
+                ]
 
-                    raise ValueError(
-                        "Grounded insight generation is incomplete. "
-                        f"Missing: {sorted(missing_cards)}"
+                if missing_cards:
+                    logger.warning(
+                        "LLM returned partial insights. "
+                        "Using fallback only for missing cards: %s",
+                        missing_cards,
                     )
+
+                    for card_name in missing_cards:
+                        grounded_insights[card_name] = self._build_factual_fallback(
+                            card=card_name,
+                            verified_data=(
+                                verified_context_by_card.get(
+                                    card_name,
+                                    {},
+                                )
+                            ),
+                        )
 
                 self._set_cached_insights(
                     cache_key,
@@ -851,8 +870,8 @@ STRICT RULES:
     supported by the supplied weather information.
 13. Do not claim certainty when the supplied data is uncertain.
 14. Do not introduce weather conditions that were not supplied.
-15. Each insight should normally contain 2–4 well-written sentences and
-    approximately 60–120 words when sufficient verified data is available.
+15. Each insight should normally contain 2–3 well-written sentences and
+    approximately 40–90 words when sufficient verified data is available.
 16. Prefer useful interpretation over simply repeating numbers.
 17. When appropriate, answer the practical question:
     "What should the user do?"
@@ -969,8 +988,8 @@ When information is insufficient for a supported interpretation, return:
 "No specific information is available."
 
 
-28. Each insight should normally contain 2–4 sentences.
-29. Target approximately 60–120 words when the supplied verified data
+28. Each insight should normally contain 2–3 sentences.
+29. Target approximately 40–90 words when the supplied verified data
     supports a useful explanation. Do not add filler merely to increase length.
     
 30. The insight should feel like a premium personalized weather briefing,
@@ -1078,16 +1097,18 @@ When information is insufficient for a supported interpretation, return:
     additional physical meaning, severity, suitability, or impact beyond the
     explicitly supplied context.
 
-36. Do not convert numeric values into qualitative labels such as
-    "low", "moderate", "high", "small", "warm", "hot", "manageable",
-    "comfortable", "favorable", "suitable", "breezy", "strong",
-    "light", "good", "poor", "cool", "damp", or "heavy" unless that
-    interpretation is explicitly supported by the supplied context.
+36. You may interpret verified numeric weather values using common
+    weather terminology when useful to the user.
+    You may use natural descriptions such as low, moderate, high,
+    warm, cool, humid, windy, comfortable, or poor when they are
+    reasonable interpretations of the supplied verified measurements.
+    Do not invent measurements or weather conditions.
 
-    In particular, never describe wind as "strong" or "moderate",
-    visibility as "good" or "poor", precipitation as "light",
-    "moderate", or "heavy", or any activity condition as "good",
-    "suitable", or "favorable" based only on a numeric value.
+    Do not make guarantees about medical safety, marine safety,
+    agricultural outcomes, travel safety, or other specialized decisions.
+
+    Practical recommendations should remain cautious and should be
+    based on the supplied weather information.
 
 37. Do not turn weather observations into activity suitability decisions.
     For running, surfing, commuting, travel, family/school, events, or other
