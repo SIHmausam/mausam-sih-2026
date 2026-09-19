@@ -43,10 +43,7 @@ class CardMapper {
           weather.apparentTemperature,
           temperatureUnit,
         );
-        final dewPoint = _displayTemperature(
-          weather.dewPoint,
-          temperatureUnit,
-        );
+        final dewPoint = _displayTemperature(weather.dewPoint, temperatureUnit);
 
         return CardDisplayData(
           icon: Icons.thermostat_outlined,
@@ -81,10 +78,7 @@ class CardMapper {
 
       case 'humidity':
         final unit = _temperatureSymbol(temperatureUnit);
-        final dewPoint = _displayTemperature(
-          weather.dewPoint,
-          temperatureUnit,
-        );
+        final dewPoint = _displayTemperature(weather.dewPoint, temperatureUnit);
         final feelsLike = _displayTemperature(
           weather.apparentTemperature,
           temperatureUnit,
@@ -127,14 +121,8 @@ class CardMapper {
 
       case 'wind':
         final unit = _windSpeedSymbol(windSpeedUnit);
-        final windSpeed = _displayWindSpeed(
-          weather.windSpeed,
-          windSpeedUnit,
-        );
-        final gusts = _displayWindSpeed(
-          weather.windGusts,
-          windSpeedUnit,
-        );
+        final windSpeed = _displayWindSpeed(weather.windSpeed, windSpeedUnit);
+        final gusts = _displayWindSpeed(weather.windGusts, windSpeedUnit);
 
         return CardDisplayData(
           icon: Icons.air,
@@ -198,10 +186,7 @@ class CardMapper {
           weather.apparentTemperature,
           temperatureUnit,
         );
-        final windSpeed = _displayWindSpeed(
-          weather.windSpeed,
-          windSpeedUnit,
-        );
+        final windSpeed = _displayWindSpeed(weather.windSpeed, windSpeedUnit);
 
         return CardDisplayData(
           icon: Icons.directions_run,
@@ -220,6 +205,17 @@ class CardMapper {
         );
 
       case 'surf_conditions':
+        if (weather.waveHeight == null) {
+          return CardDisplayData(
+            icon: Icons.surfing,
+            title: 'Surf Conditions',
+            value: 'Unavailable',
+            status: 'Marine data',
+            insight: card.insight,
+            indicatorColor: Colors.blueAccent,
+          );
+        }
+
         final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
         final seaTemperature = weather.seaSurfaceTemperature == null
             ? null
@@ -231,12 +227,8 @@ class CardMapper {
         return CardDisplayData(
           icon: Icons.surfing,
           title: 'Surf Conditions',
-          value: weather.waveHeight == null
-              ? 'N/A'
-              : '${weather.waveHeight!.toStringAsFixed(1)} m',
-          status: weather.waveHeight == null
-              ? 'Marine data unavailable'
-              : 'Wave height',
+          value: '${weather.waveHeight!.toStringAsFixed(1)} m',
+          status: 'Wave height',
           insight: card.insight,
           indicatorColor: Colors.blueAccent,
           details: [
@@ -252,6 +244,17 @@ class CardMapper {
         );
 
       case 'tide_water':
+        if (weather.seaLevelHeightMsl == null) {
+          return CardDisplayData(
+            icon: Icons.waves,
+            title: 'Tide & Water',
+            value: 'Unavailable',
+            status: 'Marine data',
+            insight: card.insight,
+            indicatorColor: Colors.cyanAccent,
+          );
+        }
+
         final temperatureUnitSymbol = _temperatureSymbol(temperatureUnit);
         final waterTemperature = weather.seaSurfaceTemperature == null
             ? null
@@ -263,17 +266,12 @@ class CardMapper {
         return CardDisplayData(
           icon: Icons.waves,
           title: 'Tide & Water',
-          value: weather.seaLevelHeightMsl == null
-              ? 'N/A'
-              : '${weather.seaLevelHeightMsl!.toStringAsFixed(2)} m',
-          status: weather.seaLevelHeightMsl == null
-              ? 'Marine data unavailable'
-              : 'Sea level',
+          value: '${weather.seaLevelHeightMsl!.toStringAsFixed(2)} m',
+          status: 'Sea level',
           insight: card.insight,
           indicatorColor: Colors.cyanAccent,
           details: [
-            if (weather.seaLevelHeightMsl != null)
-              'Sea level: ${weather.seaLevelHeightMsl!.toStringAsFixed(2)} m',
+            'Sea level: ${weather.seaLevelHeightMsl!.toStringAsFixed(2)} m',
             if (waterTemperature != null)
               'Water temperature: ${waterTemperature.toStringAsFixed(1)}$temperatureUnitSymbol',
             if (weather.waveHeight != null)
@@ -314,10 +312,7 @@ class CardMapper {
 
       case 'commute_conditions':
         final windUnit = _windSpeedSymbol(windSpeedUnit);
-        final windSpeed = _displayWindSpeed(
-          weather.windSpeed,
-          windSpeedUnit,
-        );
+        final windSpeed = _displayWindSpeed(weather.windSpeed, windSpeedUnit);
 
         return CardDisplayData(
           icon: Icons.directions_car_outlined,
@@ -348,10 +343,7 @@ class CardMapper {
           weather.apparentTemperature,
           temperatureUnit,
         );
-        final windSpeed = _displayWindSpeed(
-          weather.windSpeed,
-          windSpeedUnit,
-        );
+        final windSpeed = _displayWindSpeed(weather.windSpeed, windSpeedUnit);
 
         return CardDisplayData(
           icon: Icons.travel_explore,
@@ -377,10 +369,7 @@ class CardMapper {
           weather.temperature,
           temperatureUnit,
         );
-        final windSpeed = _displayWindSpeed(
-          weather.windSpeed,
-          windSpeedUnit,
-        );
+        final windSpeed = _displayWindSpeed(weather.windSpeed, windSpeedUnit);
 
         return CardDisplayData(
           icon: Icons.school_outlined,
@@ -410,10 +399,7 @@ class CardMapper {
           weather.apparentTemperature,
           temperatureUnit,
         );
-        final windSpeed = _displayWindSpeed(
-          weather.windSpeed,
-          windSpeedUnit,
-        );
+        final windSpeed = _displayWindSpeed(weather.windSpeed, windSpeedUnit);
 
         return CardDisplayData(
           icon: Icons.event_outlined,
@@ -478,10 +464,7 @@ class CardMapper {
     return 'Very High';
   }
 
-  static double _displayTemperature(
-    double celsius,
-    String temperatureUnit,
-  ) {
+  static double _displayTemperature(double celsius, String temperatureUnit) {
     if (temperatureUnit.toLowerCase() == 'fahrenheit') {
       return (celsius * 9 / 5) + 32;
     }
@@ -492,10 +475,7 @@ class CardMapper {
     return temperatureUnit.toLowerCase() == 'fahrenheit' ? '°F' : '°C';
   }
 
-  static double _displayWindSpeed(
-    double kmh,
-    String windSpeedUnit,
-  ) {
+  static double _displayWindSpeed(double kmh, String windSpeedUnit) {
     switch (windSpeedUnit.toLowerCase()) {
       case 'm/s':
         return kmh / 3.6;
