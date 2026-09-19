@@ -481,7 +481,7 @@ class LLMInsightService:
                         prompt=prompt,
                         response_schema=response_schema,
                     ),
-                    timeout=8.0,
+                    timeout=10.0,
                 )
                 logger.info(
                     "RAW LLM RESPONSE: %s",
@@ -870,8 +870,8 @@ STRICT RULES:
     supported by the supplied weather information.
 13. Do not claim certainty when the supplied data is uncertain.
 14. Do not introduce weather conditions that were not supplied.
-15. Each insight should normally contain 2–3 well-written sentences and
-    approximately 40–90 words when sufficient verified data is available.
+15. Each insight should normally contain 1–2 well-written sentences and
+    approximately 25–50 words when sufficient verified data is available.
 16. Prefer useful interpretation over simply repeating numbers.
 17. When appropriate, answer the practical question:
     "What should the user do?"
@@ -988,8 +988,8 @@ When information is insufficient for a supported interpretation, return:
 "No specific information is available."
 
 
-28. Each insight should normally contain 2–3 sentences.
-29. Target approximately 40–90 words when the supplied verified data
+28. Each insight should normally contain 1–2 sentences.
+29. Target approximately 25–50 words when the supplied verified data
     supports a useful explanation. Do not add filler merely to increase length.
     
 30. The insight should feel like a premium personalized weather briefing,
